@@ -7,18 +7,23 @@ What is qibo-comb-optimisation?
 qibo-comb-optimisation is a Qibo plugin that has tools to solve combinatorial optimisation problems.
 
 
-API Reference
-=============
-
-.. toctree::
-   :maxdepth: 2
-   :caption: Contents:
-
-   optimisation_class
-   combinatorial_classes
+Contents
+========
 
 .. toctree::
     :maxdepth: 2
+    :caption: Introduction
+
+    getting-started/index
+
+.. toctree::
+    :maxdepth: 2
+    :caption: Main Documentation
+
+    api-reference/index
+
+.. toctree::
+    :maxdepth: 1
     :caption: Documentation links
 
     Qibo docs <https://qibo.science/qibo/stable/>
@@ -29,3 +34,9 @@ API Reference
     Qibotn docs <https://qibo.science/qibotn/stable/>
     Qibo-cloud-backends docs <https://qibo.science/qibo-cloud-backends/stable/>
     Qibo-comb-optimisation docs <https://qibo.science/qibo-comb-optimisation/stable/>
+
+Indices and tables
+==================
+
+* :ref:`genindex`
+* :ref:`search`

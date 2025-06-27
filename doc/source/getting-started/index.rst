@@ -7,5 +7,5 @@ This section covers how to install ``qibo-comb-optimisation`` and a basic exampl
 .. toctree::
     :maxdepth: 1
 
-    quickstart
     installation
+    quickstart
