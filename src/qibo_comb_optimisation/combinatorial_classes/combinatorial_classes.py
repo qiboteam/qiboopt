@@ -253,26 +253,26 @@ class TSP:
                             self.two_to_one[v, (j + 1) % self.num_cities],
                         ] = self.distance_matrix[u, v]
         qp = QUBO(0, q_dict)
-        # row constraints
 
+        # row constraints
         for v in range(self.num_cities):
-            row_constrait = [0 for _ in range(self.num_cities**2)]
+            row_constraint = [0 for _ in range(self.num_cities**2)]
             for j in range(self.num_cities):
-                row_constrait[self.two_to_one[v, j]] = 1
-            lp = linear_problem(row_constrait, -1)
+                row_constraint[self.two_to_one[v, j]] = 1
+            lp = linear_problem(row_constraint, -1)
             tmp_qp = lp.square()
             tmp_qp.multiply_scalar(penalty)
-            qp += tmp_qp
+            qp + tmp_qp
 
         # column constraints
         for j in range(self.num_cities):
-            col_constrait = [0 for _ in range(self.num_cities**2)]
+            col_constraint = [0 for _ in range(self.num_cities**2)]
             for v in range(self.num_cities):
-                col_constrait[self.two_to_one[v, j]] = 1
-            lp = linear_problem(col_constrait, -1)
+                col_constraint[self.two_to_one[v, j]] = 1
+            lp = linear_problem(col_constraint, -1)
             tmp_qp = lp.square()
             tmp_qp.multiply_scalar(penalty)
-            qp += tmp_qp
+            qp + tmp_qp
         return qp
 
 
