@@ -1,3 +1,7 @@
+"""
+Optimisation classes
+"""
+
 import itertools
 from collections import defaultdict
 
@@ -7,7 +11,7 @@ from qibo.backends import _check_backend
 from qibo.config import raise_error
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models import QAOA
-from qibo.optimizers import optimize as optimize
+from qibo.optimizers import optimize
 from qibo.symbols import Z
 
 
@@ -80,6 +84,10 @@ class QUBO:
         else:
             raise_error(TypeError, "Invalid input for QUBO.")
 
+        # Define other class attributes
+        self.n_layers = None
+        self.num_betas = None
+
     def _phase_separation(self, circuit, gamma):
         """
         Applies the phase separation layer (corresponding to the Ising model Hamiltonian).
@@ -135,7 +143,9 @@ class QUBO:
             else:
                 if custom_mixer:
                     if len(gammas) != len(betas):
-                        raise_error(ValueError, f"Input len(gammas) != len(betas).")
+                        raise_error(
+                            ValueError, f"Input {len(gammas) = } != {len(betas) = }."
+                        )
 
                     # Extract number of betas per layer
                     betas_per_layer = len(betas) // p
@@ -459,14 +469,15 @@ class QUBO:
             circuit (:class:`qibo.models.Circuit`): The QAOA or XQAOA circuit corresponding to the QUBO problem.
         """
         if alphas is not None:  # Use XQAOA, ignore mixer_function
-            return self._build(gammas, betas, alphas)
+            circuit = self._build(gammas, betas, alphas)
         else:
             if custom_mixer:
-                return self._build(
+                circuit = self._build(
                     gammas, betas, alphas=None, custom_mixer=custom_mixer
                 )
             else:
-                return self._build(gammas, betas)
+                circuit = self._build(gammas, betas)
+        return circuit
 
     def train_QAOA(
         self,
@@ -484,8 +495,9 @@ class QUBO:
         noise_model=None,
     ):
         """
-        Constructs the QAOA or XQAOA circuit with optional parameters for the mixers or phases before using a classical optimizer to search for the
-        optimal parameters which minimise the cost function (either expected value or Conditional Variance at Risk (CVaR).
+        Constructs the QAOA or XQAOA circuit with optional parameters for the mixers or phases before using a classical
+        optimizer to search for the optimal parameters which minimise the cost function (either expected value or
+        Conditional Variance at Risk (CVaR).
 
         Args:
             gammas (List[float], optional): parameters for phasers.
@@ -496,7 +508,8 @@ class QUBO:
             regular_loss (Bool, optional): If False, Conditional Variance at Risk (CVaR) is used as cost function.
                 Defaults to True, where expected value is used as cost function.
             maxiter (int, optional): Maximum number of iterations used in the minimiser. Defaults to 10.
-            cvar_delta (float, optional): Represents the quantile threshold used for calculating the CVaR. Defaults to 0.25.
+            cvar_delta (float, optional): Represents the quantile threshold used for calculating the CVaR. Defaults to
+                `0.25`.
             custom_mixer (List[:class:`qibo.models.Circuit`]): optional argument that takes as input custom mixers.
                 If len(custom_mixer) == 1, then use this one circuit as mixer for all layers.
                 If len(custom_mixer) == len(gammas), then use each circuit as mixer for each layer.
@@ -722,7 +735,7 @@ class QUBO:
         """
 
         # Convert QUBO to Ising Hamiltonian
-        h, J, constant = self.qubo_to_ising()
+        h, J, _constant = self.qubo_to_ising()
 
         # Create the Ising Hamiltonian using Qibo
         symbolic_ham = sum(h[i] * Z(i) for i in h)
@@ -746,37 +759,25 @@ class linear_problem:
         b (np.ndarray): Constant vector.
         n (int): Dimension of the problem, inferred from the size of b.
 
-    Methods:
-        multiply_scalar(scalar):
-            Multiplies the matrix A and vector b by a scalar.
+    Example:
+        .. testcode::
 
-        __add__(other):
-            Adds another linear_problem to the current one.
-
-        evaluate_f(x):
-            Evaluates the linear function at a given point x.
-
-        square():
-            Squares the linear problem, returning a quadratic problem.
+            A1 = np.array([[1, 2], [3, 4]])
+            b1 = np.array([5, 6])
+            lp1 = linear_problem(A1, b1)
+            A2 = np.array([[1, 1], [1, 1]])
+            b2 = np.array([1, 1])
+            lp2 = linear_problem(A2, b2)
+            lp1 + lp2
+            print(lp1.A)
+            # >>> [[2 3]
+            #      [4 5]]
+            print(lp1.b)
+            # >>> [6 7]
     """
 
     def __init__(self, A, b):
-        """Initializes the linear problem.
-
-        Args:
-            A (np.ndarray): Coefficient matrix.
-            b (np.ndarray): Constant vector.
-
-        # TODO: Raises: ValueError
-            If A and b have incompatible dimensions.
-
-        Example:
-            .. testcode::
-
-                A = np.array([[1, 2], [3, 4]])
-                b = np.array([5, 6])
-                lp = linear_problem(A, b)
-        """
+        # TODO: raise ValueError if A and b have incompatible dimensions.
         self.A = np.atleast_2d(A)
         self.b = np.array([b]) if np.isscalar(b) else np.asarray(b)
         self.n = self.A.shape[1]
@@ -796,7 +797,7 @@ class linear_problem:
                 lp.multiply_scalar(2)
                 print(lp.A)
                 # >>> [[2 4]
-                       [6 8]]
+                #      [6 8]]
                 print(lp.b)
                 # >>> [10 12]
         """
@@ -804,30 +805,6 @@ class linear_problem:
         self.b *= scalar_multiplier
 
     def __add__(self, other_linear):
-        """Adds another linear_problem to the current one.
-
-        Args:
-            other_linear (linear_problem): Another linear_problem to be added.
-
-        # TODO: Raises: ValueError
-            If the dimensions of the two linear problems do not match.
-
-        Example:
-            .. testcode::
-
-                A1 = np.array([[1, 2], [3, 4]])
-                b1 = np.array([5, 6])
-                lp1 = linear_problem(A1, b1)
-                A2 = np.array([[1, 1], [1, 1]])
-                b2 = np.array([1, 1])
-                lp2 = linear_problem(A2, b2)
-                lp1 + lp2
-                print(lp1.A)
-                # >>> [[2 3]
-                       [4 5]]
-                print(lp1.b)
-                # >>> [6 7]
-        """
         self.A += other_linear.A
         self.b += other_linear.b
 
@@ -857,7 +834,8 @@ class linear_problem:
         """Squares the linear problem to obtain a quadratic problem.
 
         Returns:
-            `class:QUBO`: A quadratic problem corresponding to squaring the linear function.
+            :class:`qibo_comb_optimisation.optimisation_class.optimisation_class.QUBO`: A quadratic problem
+            corresponding to squaring the linear function.
 
         Example:
             .. testcode::
@@ -874,7 +852,7 @@ class linear_problem:
         quadraticpart = self.A.T @ self.A + np.diag(2 * (self.b @ self.A))
         offset = np.dot(self.b, self.b)
         num_rows, num_cols = quadraticpart.shape
-        Qdict = dict()
+        Qdict = {}
         for i in range(num_rows):
             for j in range(num_cols):
                 Qdict[(i, j)] = quadraticpart[i, j]
