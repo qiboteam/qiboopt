@@ -1,8 +1,8 @@
 Quickstart
 ----------
 
-Once installed, ``qibo-comb-optimisation`` allows the general user to solve QUBO problems with the built-in QUBO class.
-Along with the QUBO class, there are some combinatorial classes found in :class:`qibo_comb_optimisation.combinatorial_classes`.
+Once installed, ``qibo-comb-optimisation`` allows the general user to solve QUBO problems with the built-in ``QUBO`` class.
+Along with the ``QUBO`` class, there are some combinatorial classes found in :class:`qibo_comb_optimisation.combinatorial_classes`.
 
 Formuating a QUBO problem:
 
@@ -29,7 +29,7 @@ Formuating a QUBO problem:
    # Brute force search by evaluating all possible binary vectors.
    opt_vector, min_value = qp.brute_force()
 
-Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (`qp`):
+Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp``):
 
 .. code-block:: python
 
@@ -39,7 +39,7 @@ Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (`qp`)
    betas = [0.3, 0.4]
    output = qp.train_QAOA(gammas=gammas, betas=betas)
 
-Use `XQAOA <https://arxiv.org/abs/2302.04479>`_ to solve the QUBO problems (`qp`):
+Use `XQAOA <https://arxiv.org/abs/2302.04479>`_ to solve the QUBO problems (``qp``):
 
 .. code-block:: python
 
@@ -50,7 +50,7 @@ Use `XQAOA <https://arxiv.org/abs/2302.04479>`_ to solve the QUBO problems (`qp`
    alphas = [0.5, 0.6]
    output = qp.train_QAOA(gammas=gammas, betas=betas, alphas=alphas)
 
-Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (`qp`) using Conditional Variance at Risk (CVaR) loss function:
+Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp``) using Conditional Variance at Risk (CVaR) loss function:
 
 .. code-block:: python
 

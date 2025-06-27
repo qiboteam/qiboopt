@@ -1,15 +1,15 @@
 Installation instructions
 =========================
 
-Installing with pip
--------------------
-
 We recommend starting with a fresh virtual environment to avoid dependency conflicts with previously installed packages.
 
 .. code-block:: bash
 
    $ python -m venv ./env
    source activate ./env/bin/activate
+
+Installing with pip
+-------------------
 
 The ``qibo-comb-optimisation`` package along with its dependencies can be installed through pip:
 
