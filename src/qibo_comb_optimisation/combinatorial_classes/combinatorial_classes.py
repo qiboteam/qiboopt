@@ -1,5 +1,5 @@
 """
-This module comprises of various combinatorial optimisation applications that are commonly formulated in QUBO formulations.
+Various combinatorial optimisation applications that are commonly formulated as QUBO problems.
 """
 
 import numpy as np
@@ -23,7 +23,7 @@ def _calculate_two_to_one(num_cities):
         num_cities (int): The number of cities for the TSP.
 
     Returns:
-        np.ndarray: A 2D array mapping two coordinates to one.
+        (np.ndarray): A 2D array mapping two coordinates to one.
     """
     return np.arange(num_cities**2).reshape(num_cities, num_cities)
 
@@ -37,7 +37,7 @@ def _tsp_phaser(distance_matrix, backend=None):
         backend: Backend to be used for the calculations (optional).
 
     Returns:
-        SymbolicHamiltonian: The phaser Hamiltonian for TSP.
+        :class:`qibo.hamiltonians.SymbolicHamiltonian`: Phaser Hamiltonian for TSP.
     """
     num_cities = distance_matrix.shape[0]
     two_to_one = _calculate_two_to_one(num_cities)
@@ -115,8 +115,7 @@ def _tsp_mixer(num_cities, backend=None):
 
 class TSP:
     """
-    Class representing the Travelling Salesman Problem (TSP). The implementation is based on
-    [arxiv:1709.03489](https://arxiv.org/abs/1709.03489) by Hadfield (2017).
+    Class representing the Travelling Salesman Problem (TSP). The implementation is based on the work by Hadfield.
 
     Args:
         distance_matrix: a numpy matrix encoding the distance matrix.
@@ -192,6 +191,9 @@ class TSP:
             initial_state = small_tsp.prepare_initial_state([i for i in range(num_cities)])
             qaoa_function_of_layer(2, distance_matrix)
 
+    Reference:
+        1. S. Hadfield, Z. Wang, B. O'Gorman, E. G. Rieffel, D. Venturelli, R. Biswas, *From the Quantum Approximate
+        Optimization Algorithm to a Quantum Alternating Operator Ansatz*. (`arxiv:1709.03489 <https://arxiv.org/abs/1709.03489>`__)
     """
 
     def __init__(self, distance_matrix, backend=None):
@@ -251,23 +253,23 @@ class TSP:
                             self.two_to_one[v, (j + 1) % self.num_cities],
                         ] = self.distance_matrix[u, v]
         qp = QUBO(0, q_dict)
-        # row constraints
 
+        # row constraints
         for v in range(self.num_cities):
-            row_constrait = [0 for _ in range(self.num_cities**2)]
+            row_constraint = [0 for _ in range(self.num_cities**2)]
             for j in range(self.num_cities):
-                row_constrait[self.two_to_one[v, j]] = 1
-            lp = linear_problem(row_constrait, -1)
+                row_constraint[self.two_to_one[v, j]] = 1
+            lp = linear_problem(row_constraint, -1)
             tmp_qp = lp.square()
             tmp_qp.multiply_scalar(penalty)
             qp + tmp_qp
 
         # column constraints
         for j in range(self.num_cities):
-            col_constrait = [0 for _ in range(self.num_cities**2)]
+            col_constraint = [0 for _ in range(self.num_cities**2)]
             for v in range(self.num_cities):
-                col_constrait[self.two_to_one[v, j]] = 1
-            lp = linear_problem(col_constrait, -1)
+                col_constraint[self.two_to_one[v, j]] = 1
+            lp = linear_problem(col_constraint, -1)
             tmp_qp = lp.square()
             tmp_qp.multiply_scalar(penalty)
             qp + tmp_qp
@@ -315,7 +317,8 @@ class Mis:
             penalty (float): The penalty parameter for constraint violations.
 
         Returns:
-            QUBO (:class:`qibo_comb_optimisation.optimisation_class.optimisation_class.QUBO`): A QUBO object for the Maximal Independent Set (MIS) problem.
+            QUBO (:class:`qibo_comb_optimisation.optimisation_class.optimisation_class.QUBO`): A QUBO object for the
+            Maximal Independent Set (MIS) problem.
         """
         q_dict = {}
         for i in range(self.n):

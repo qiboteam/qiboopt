@@ -3,7 +3,7 @@
 Combinatorial classes
 ---------------------
 
-Listed here are two Quadratic Unconstrained Binary Optimisation (QUBO) problems, the :ref:`Travelling Salesman Problem <TSP>` and the :ref:`Maximum Independent Set <MIS>`.
+Two Quadratic Unconstrained Binary Optimisation (QUBO) example problems are listed here: the :ref:`Travelling Salesman Problem <TSP>` and the :ref:`Maximum Independent Set <MIS>`.
 
 .. _TSP:
 
@@ -16,7 +16,7 @@ Briefly, the problem revolves around finding the shortest possible route for a s
 
 The idea behind TSP can be mapped to similar-type problems. For instance, what is the optimal route for the salesman to take in order to minimise something.
 
-In this module, the TSP class follows Hadfield's 2017 paper `arxiv:1709.03489 <https://arxiv.org/abs/1709.03489>`.
+In this module, the TSP class follows `Hadfield's 2017 paper <https://arxiv.org/abs/1709.03489>`_.
 
 .. autoclass:: qibo_comb_optimisation.combinatorial_classes.combinatorial_classes.TSP
     :members:

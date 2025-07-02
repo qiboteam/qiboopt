@@ -22,7 +22,11 @@ optional = true
 [tool.poetry.group.docs.dependencies]
 sphinx = "^7.3.7"
 furo = "^2024.08.06"
+sphinxcontrib-bibtex = "^2.6.0"
+sphinx-copybutton = "^0.5.1"
+sphinxcontrib-katex = "^0.9.9"
 recommonmark = "^0.7.1"
+nbsphinx = "^0.9.6"
 
 [tool.poetry.group.tests]
 optional = true
