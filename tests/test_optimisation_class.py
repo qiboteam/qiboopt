@@ -22,35 +22,28 @@ def test_initialization():
     assert qp.n == 2  # Maximum variable index in Qdict keys
 
 
-def test_multiply_scalar():
-    Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-    qp = QUBO(0, Qdict)
-    qp.multiply_scalar(2)
-    assert qp.Qdict == {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
-
-
 def test_multiplication_operators():
-    """Test the new multiplication operators for QUBO"""
+    """Test the multiplication operators for QUBO"""
     Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
     qp = QUBO(0, Qdict)
-    
+
     # Test qp * 2
     qp2 = qp * 2
     assert qp2.Qdict == {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
     assert qp2.offset == 0.0
     assert qp.Qdict == Qdict  # Original unchanged
-    
+
     # Test 2 * qp
     qp3 = 2 * qp
     assert qp3.Qdict == {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
     assert qp3.offset == 0.0
     assert qp.Qdict == Qdict  # Original unchanged
-    
+
     # Test qp *= 2
     qp *= 2
     assert qp.Qdict == {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
     assert qp.offset == 0.0
-    
+
     # Test type error
     with pytest.raises(TypeError):
         qp * "invalid"
@@ -663,7 +656,7 @@ def test_linear_multiply_scalar():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
     lp = linear_problem(A, b)
-    lp.multiply_scalar(2)
+    lp *= 2
     assert np.array_equal(lp.A, np.array([[2, 4], [6, 8]]))
     assert np.array_equal(lp.b, np.array([10, 12]))
 
@@ -673,26 +666,26 @@ def test_linear_multiplication_operators():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
     lp = linear_problem(A, b)
-    
+
     # Test lp * 2
     lp2 = lp * 2
     assert np.array_equal(lp2.A, np.array([[2, 4], [6, 8]]))
     assert np.array_equal(lp2.b, np.array([10, 12]))
     assert np.array_equal(lp.A, A)  # Original unchanged
     assert np.array_equal(lp.b, b)  # Original unchanged
-    
+
     # Test 2 * lp
     lp3 = 2 * lp
     assert np.array_equal(lp3.A, np.array([[2, 4], [6, 8]]))
     assert np.array_equal(lp3.b, np.array([10, 12]))
     assert np.array_equal(lp.A, A)  # Original unchanged
     assert np.array_equal(lp.b, b)  # Original unchanged
-    
+
     # Test lp *= 2
     lp *= 2
     assert np.array_equal(lp.A, np.array([[2, 4], [6, 8]]))
     assert np.array_equal(lp.b, np.array([10, 12]))
-    
+
     # Test type error
     with pytest.raises(TypeError):
         lp * "invalid"

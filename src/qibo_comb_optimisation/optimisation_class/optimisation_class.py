@@ -41,6 +41,7 @@ class QUBO:
                         {(u, v): bias, ...}, where keys are 2-tuples of variables of the model
                         and values are optimisation_class biases associated with the pair of
                         variables (the interaction).
+
         Example:
             .. testcode::
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
@@ -131,8 +132,7 @@ class QUBO:
 
         # Apply initial Hadamard gates (uniform superposition)
         circuit = Circuit(self.n, density_matrix=True)
-        for i in range(self.n):
-            circuit.add(gates.H(i))
+        circuit.add(gates.H(i) for i in range(self.n))
 
         for layer in range(p):
             self._phase_separation(
@@ -179,29 +179,9 @@ class QUBO:
                 else:
                     self._default_mixer(circuit, betas[layer])
 
-        for i in range(self.n):
-            circuit.add(gates.M(i))
+        circuit.add(gates.M(i) for i in range(self.n))
 
         return circuit
-
-    def multiply_scalar(self, scalar_multiplier):
-        """Multiplies all the quadratic coefficients by a scalar value.
-
-        Args:
-            scalar_multiplier (float): The scalar value by which to multiply the coefficients.
-
-        Example:
-            .. testcode::
-
-                Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp = QUBO(0, Qdict)
-                qp.multiply_scalar(2)
-                print(qp.Qdict)
-                # >>> {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
-        """
-        for key in self.Qdict:
-            self.Qdict[key] *= scalar_multiplier
-        self.offset *= scalar_multiplier
 
     def __add__(self, other_quadratic):
         """
@@ -209,7 +189,7 @@ class QUBO:
             other_Quadratic: another QUBO class object
         Returns:
             QUBO: A new QUBO object representing the sum of self and other_Quadratic
-            
+
         Example:
             .. testcode::
                 Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
@@ -226,29 +206,26 @@ class QUBO:
         """
         # Create a deep copy of the current QUBO's Qdict
         new_Qdict = self.Qdict.copy()
-        
+
         # Add the other QUBO's coefficients
-        for key in other_quadratic.Qdict:
-            if key in new_Qdict:
-                new_Qdict[key] += other_quadratic.Qdict[key]
-            else:
-                new_Qdict[key] = other_quadratic.Qdict[key]
-        
+        for key, value in other_quadratic.Qdict.items():
+            new_Qdict[key] = new_Qdict.get(key, 0.0) + value
+
         # Calculate the new offset
         new_offset = self.offset + other_quadratic.offset
-        
+
         # Create and return a new QUBO object
-        return QUBO(new_offset, new_Qdict)
+        return self.__class__(new_offset, new_Qdict)
 
     def __mul__(self, scalar):
         """
         Implements scalar multiplication: qp * 2
-        
+
         Args:
             scalar (float): The scalar value to multiply by
         Returns:
             QUBO: A new QUBO object with all coefficients multiplied by the scalar
-            
+
         Example:
             .. testcode::
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
@@ -261,15 +238,15 @@ class QUBO:
         """
         if not isinstance(scalar, (int, float)):
             raise TypeError("Can only multiply QUBO by scalar (int or float)")
-        
+
         new_Qdict = {key: value * scalar for key, value in self.Qdict.items()}
         new_offset = self.offset * scalar
-        return QUBO(new_offset, new_Qdict)
+        return self.__class__(new_offset, new_Qdict)
 
     def __rmul__(self, scalar):
         """
         Implements right scalar multiplication: 2 * qp
-        
+
         Args:
             scalar (float): The scalar value to multiply by
         Returns:
@@ -277,22 +254,22 @@ class QUBO:
         """
         return self.__mul__(scalar)
 
-    def __imul__(self, scalar):
-        """
-        Implements in-place scalar multiplication: qp *= 2
-        
-        Args:
-            scalar (float): The scalar value to multiply by
-        Returns:
-            self: The modified QUBO object
-        """
-        if not isinstance(scalar, (int, float)):
-            raise TypeError("Can only multiply QUBO by scalar (int or float)")
-        
-        for key in self.Qdict:
-            self.Qdict[key] *= scalar
-        self.offset *= scalar
-        return self
+    # def __imul__(self, scalar):
+    #     """
+    #     Implements in-place scalar multiplication: qp *= 2
+    #
+    #     Args:
+    #         scalar (float): The scalar value to multiply by
+    #     Returns:
+    #         self: The modified QUBO object
+    #     """
+    #     if not isinstance(scalar, (int, float)):
+    #         raise TypeError("Can only multiply QUBO by scalar (int or float)")
+    #
+    #     for key in self.Qdict:
+    #         self.Qdict[key] *= scalar
+    #     self.offset *= scalar
+    #     return self
 
     def qubo_to_ising(self, constant=0.0):
         """Convert a QUBO problem to an Ising problem.
@@ -861,27 +838,27 @@ class linear_problem:
         self.b = np.array([b]) if np.isscalar(b) else np.asarray(b)
         self.n = self.A.shape[1]
 
-    def multiply_scalar(self, scalar_multiplier):
-        """Multiplies the matrix A and vector b by a scalar.
+    # def multiply_scalar(self, scalar_multiplier):
+    #     """Multiplies the matrix A and vector b by a scalar.
 
-        Args:
-            scalar (float): The scalar value to multiply the matrix A and vector b.
+    #     Args:
+    #         scalar (float): The scalar value to multiply the matrix A and vector b.
 
-        Example:
-            .. testcode::
+    #     Example:
+    #         .. testcode::
 
-                A = np.array([[1, 2], [3, 4]])
-                b = np.array([5, 6])
-                lp = linear_problem(A, b)
-                lp.multiply_scalar(2)
-                print(lp.A)
-                # >>> [[2 4]
-                #      [6 8]]
-                print(lp.b)
-                # >>> [10 12]
-        """
-        self.A *= scalar_multiplier
-        self.b *= scalar_multiplier
+    #             A = np.array([[1, 2], [3, 4]])
+    #             b = np.array([5, 6])
+    #             lp = linear_problem(A, b)
+    #             lp.multiply_scalar(2)
+    #             print(lp.A)
+    #             # >>> [[2 4]
+    #             #      [6 8]]
+    #             print(lp.b)
+    #             # >>> [10 12]
+    #     """
+    #     self.A *= scalar_multiplier
+    #     self.b *= scalar_multiplier
 
     def __add__(self, other_linear):
         """
@@ -893,19 +870,19 @@ class linear_problem:
         # Create copies of the matrices and vectors
         new_A = self.A.copy() + other_linear.A
         new_b = self.b.copy() + other_linear.b
-        
+
         # Create and return a new linear_problem object
-        return linear_problem(new_A, new_b)
+        return self.__class__(new_A, new_b)
 
     def __mul__(self, scalar):
         """
         Implements scalar multiplication: lp * 2
-        
+
         Args:
             scalar (float): The scalar value to multiply by
         Returns:
             linear_problem: A new linear_problem object with A and b multiplied by the scalar
-            
+
         Example:
             .. testcode::
                 A = np.array([[1, 2], [3, 4]])
@@ -923,37 +900,21 @@ class linear_problem:
         """
         if not isinstance(scalar, (int, float)):
             raise TypeError("Can only multiply linear_problem by scalar (int or float)")
-        
+
         new_A = self.A.copy() * scalar
         new_b = self.b.copy() * scalar
-        return linear_problem(new_A, new_b)
+        return self.__class__(new_A, new_b)
 
     def __rmul__(self, scalar):
         """
         Implements right scalar multiplication: 2 * lp
-        
+
         Args:
             scalar (float): The scalar value to multiply by
         Returns:
             linear_problem: A new linear_problem object with A and b multiplied by the scalar
         """
         return self.__mul__(scalar)
-
-    def __imul__(self, scalar):
-        """
-        Implements in-place scalar multiplication: lp *= 2
-        
-        Args:
-            scalar (float): The scalar value to multiply by
-        Returns:
-            self: The modified linear_problem object
-        """
-        if not isinstance(scalar, (int, float)):
-            raise TypeError("Can only multiply linear_problem by scalar (int or float)")
-        
-        self.A *= scalar
-        self.b *= scalar
-        return self
 
     def evaluate_f(self, x):
         """Evaluates the linear function Ax + b at a given point x.
@@ -999,8 +960,9 @@ class linear_problem:
         quadraticpart = self.A.T @ self.A + np.diag(2 * (self.b @ self.A))
         offset = np.dot(self.b, self.b)
         num_rows, num_cols = quadraticpart.shape
-        Qdict = {}
-        for i in range(num_rows):
-            for j in range(num_cols):
-                Qdict[(i, j)] = quadraticpart[i, j]
+        Qdict = {
+            (i, j): quadraticpart[i, j]
+            for i in range(num_rows)
+            for j in range(num_cols)
+        }
         return QUBO(offset, Qdict)
