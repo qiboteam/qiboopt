@@ -1,10 +1,10 @@
 .. title::
       Qibo-comb-optimisation
 
-What is qibo-comb-optimisation?
-===============================
+What is qiboopt?
+================
 
-qibo-comb-optimisation is a Qibo plugin that has tools to solve combinatorial optimisation problems.
+qiboopt (qibo optimisation) is a Qibo plugin that has tools to solve combinatorial optimisation problems.
 
 
 Contents
@@ -33,7 +33,7 @@ Contents
     Qibochem docs <https://qibo.science/qibochem/stable/>
     Qibotn docs <https://qibo.science/qibotn/stable/>
     Qibo-cloud-backends docs <https://qibo.science/qibo-cloud-backends/stable/>
-    Qibo-comb-optimisation docs <https://qibo.science/qibo-comb-optimisation/stable/>
+    Qiboopt docs <https://qibo.science/qiboopt/stable/>
 
 Indices and tables
 ==================
