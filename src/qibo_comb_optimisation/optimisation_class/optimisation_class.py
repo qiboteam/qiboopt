@@ -240,6 +240,60 @@ class QUBO:
         # Create and return a new QUBO object
         return QUBO(new_offset, new_Qdict)
 
+    def __mul__(self, scalar):
+        """
+        Implements scalar multiplication: qp * 2
+        
+        Args:
+            scalar (float): The scalar value to multiply by
+        Returns:
+            QUBO: A new QUBO object with all coefficients multiplied by the scalar
+            
+        Example:
+            .. testcode::
+                Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+                qp = QUBO(0, Qdict)
+                qp2 = qp * 2
+                print(qp2.Qdict)
+                # >>> {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
+                print(qp.Qdict)  # Original unchanged
+                # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+        """
+        if not isinstance(scalar, (int, float)):
+            raise TypeError("Can only multiply QUBO by scalar (int or float)")
+        
+        new_Qdict = {key: value * scalar for key, value in self.Qdict.items()}
+        new_offset = self.offset * scalar
+        return QUBO(new_offset, new_Qdict)
+
+    def __rmul__(self, scalar):
+        """
+        Implements right scalar multiplication: 2 * qp
+        
+        Args:
+            scalar (float): The scalar value to multiply by
+        Returns:
+            QUBO: A new QUBO object with all coefficients multiplied by the scalar
+        """
+        return self.__mul__(scalar)
+
+    def __imul__(self, scalar):
+        """
+        Implements in-place scalar multiplication: qp *= 2
+        
+        Args:
+            scalar (float): The scalar value to multiply by
+        Returns:
+            self: The modified QUBO object
+        """
+        if not isinstance(scalar, (int, float)):
+            raise TypeError("Can only multiply QUBO by scalar (int or float)")
+        
+        for key in self.Qdict:
+            self.Qdict[key] *= scalar
+        self.offset *= scalar
+        return self
+
     def qubo_to_ising(self, constant=0.0):
         """Convert a QUBO problem to an Ising problem.
 
@@ -842,6 +896,64 @@ class linear_problem:
         
         # Create and return a new linear_problem object
         return linear_problem(new_A, new_b)
+
+    def __mul__(self, scalar):
+        """
+        Implements scalar multiplication: lp * 2
+        
+        Args:
+            scalar (float): The scalar value to multiply by
+        Returns:
+            linear_problem: A new linear_problem object with A and b multiplied by the scalar
+            
+        Example:
+            .. testcode::
+                A = np.array([[1, 2], [3, 4]])
+                b = np.array([5, 6])
+                lp = linear_problem(A, b)
+                lp2 = lp * 2
+                print(lp2.A)
+                # >>> [[2 4]
+                #      [6 8]]
+                print(lp2.b)
+                # >>> [10 12]
+                print(lp.A)  # Original unchanged
+                # >>> [[1 2]
+                #      [3 4]]
+        """
+        if not isinstance(scalar, (int, float)):
+            raise TypeError("Can only multiply linear_problem by scalar (int or float)")
+        
+        new_A = self.A.copy() * scalar
+        new_b = self.b.copy() * scalar
+        return linear_problem(new_A, new_b)
+
+    def __rmul__(self, scalar):
+        """
+        Implements right scalar multiplication: 2 * lp
+        
+        Args:
+            scalar (float): The scalar value to multiply by
+        Returns:
+            linear_problem: A new linear_problem object with A and b multiplied by the scalar
+        """
+        return self.__mul__(scalar)
+
+    def __imul__(self, scalar):
+        """
+        Implements in-place scalar multiplication: lp *= 2
+        
+        Args:
+            scalar (float): The scalar value to multiply by
+        Returns:
+            self: The modified linear_problem object
+        """
+        if not isinstance(scalar, (int, float)):
+            raise TypeError("Can only multiply linear_problem by scalar (int or float)")
+        
+        self.A *= scalar
+        self.b *= scalar
+        return self
 
     def evaluate_f(self, x):
         """Evaluates the linear function Ax + b at a given point x.
