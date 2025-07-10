@@ -203,20 +203,42 @@ class QUBO:
             self.Qdict[key] *= scalar_multiplier
         self.offset *= scalar_multiplier
 
-    def __add__(self, other_Quadratic):
+    def __add__(self, other_quadratic):
         """
         Args:
-            other_Quadratic: another optimisation_class class object
+            other_Quadratic: another QUBO class object
         Returns:
-            Updating the optimisation_class function to obtain the sum
+            QUBO: A new QUBO object representing the sum of self and other_Quadratic
+            
+        Example:
+            .. testcode::
+                Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+                qp1 = QUBO(0, Qdict1)
+                Qdict2 = {(0, 0): 2.0, (1, 1): 1.0}
+                qp2 = QUBO(1, Qdict2)
+                qp3 = qp1 + qp2
+                print(qp3.Qdict)
+                # >>> {(0, 0): 3.0, (0, 1): 0.5, (1, 1): 0.0}
+                print(qp3.offset)
+                # >>> 1.0
+                print(qp1.Qdict)  # Original qp1 unchanged
+                # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
         """
-        for key in other_Quadratic.Qdict:
-            if key in self.Qdict:
-                self.Qdict[key] += other_Quadratic.Qdict[key]
+        # Create a deep copy of the current QUBO's Qdict
+        new_Qdict = self.Qdict.copy()
+        
+        # Add the other QUBO's coefficients
+        for key in other_quadratic.Qdict:
+            if key in new_Qdict:
+                new_Qdict[key] += other_quadratic.Qdict[key]
             else:
-                self.Qdict[key] = other_Quadratic.Qdict[key]
-        self.n = max(self.n, other_Quadratic.n)
-        self.offset += other_Quadratic.offset
+                new_Qdict[key] = other_quadratic.Qdict[key]
+        
+        # Calculate the new offset
+        new_offset = self.offset + other_quadratic.offset
+        
+        # Create and return a new QUBO object
+        return QUBO(new_offset, new_Qdict)
 
     def qubo_to_ising(self, constant=0.0):
         """Convert a QUBO problem to an Ising problem.
@@ -768,12 +790,15 @@ class linear_problem:
             A2 = np.array([[1, 1], [1, 1]])
             b2 = np.array([1, 1])
             lp2 = linear_problem(A2, b2)
-            lp1 + lp2
-            print(lp1.A)
+            lp3 = lp1 + lp2
+            print(lp3.A)
             # >>> [[2 3]
             #      [4 5]]
-            print(lp1.b)
+            print(lp3.b)
             # >>> [6 7]
+            print(lp1.A)  # Original lp1 unchanged
+            # >>> [[1 2]
+            #      [3 4]]
     """
 
     def __init__(self, A, b):
@@ -805,8 +830,18 @@ class linear_problem:
         self.b *= scalar_multiplier
 
     def __add__(self, other_linear):
-        self.A += other_linear.A
-        self.b += other_linear.b
+        """
+        Args:
+            other_linear: another linear_problem class object
+        Returns:
+            linear_problem: A new linear_problem object representing the sum of self and other_linear
+        """
+        # Create copies of the matrices and vectors
+        new_A = self.A.copy() + other_linear.A
+        new_b = self.b.copy() + other_linear.b
+        
+        # Create and return a new linear_problem object
+        return linear_problem(new_A, new_b)
 
     def evaluate_f(self, x):
         """Evaluates the linear function Ax + b at a given point x.

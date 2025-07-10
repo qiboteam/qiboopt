@@ -34,8 +34,12 @@ def test_add():
     Qdict2 = {(0, 0): -1.0, (1, 1): 2.0}
     qp1 = QUBO(0, Qdict1)
     qp2 = QUBO(0, Qdict2)
-    qp1 + qp2
-    assert qp1.Qdict == {(0, 0): 0.0, (0, 1): 0.5, (1, 1): 2.0}
+    qp3 = qp1 + qp2
+    assert qp3.Qdict == {(0, 0): 0.0, (0, 1): 0.5, (1, 1): 2.0}
+    assert qp3.offset == 0.0
+    # Original objects should remain unchanged
+    assert qp1.Qdict == Qdict1
+    assert qp2.Qdict == Qdict2
 
 
 @pytest.mark.parametrize(
@@ -644,9 +648,14 @@ def test_linear_addition():
     A2 = np.array([[1, 1], [1, 1]])
     b2 = np.array([1, 1])
     lp2 = linear_problem(A2, b2)
-    lp1 + lp2
-    assert np.array_equal(lp1.A, np.array([[2, 3], [4, 5]]))
-    assert np.array_equal(lp1.b, np.array([6, 7]))
+    lp3 = lp1 + lp2
+    assert np.array_equal(lp3.A, np.array([[2, 3], [4, 5]]))
+    assert np.array_equal(lp3.b, np.array([6, 7]))
+    # Original objects should remain unchanged
+    assert np.array_equal(lp1.A, A1)
+    assert np.array_equal(lp1.b, b1)
+    assert np.array_equal(lp2.A, A2)
+    assert np.array_equal(lp2.b, b2)
 
 
 def test_linear_evaluate_f():
