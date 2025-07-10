@@ -1,12 +1,12 @@
 [tool.poetry]
-name = "qibo_comb_optimisation"
+name = "qiboopt"
 version = "0.0.1"
 description = "High level application module for solving combinatorial optimisation problems with Qibo"
 authors = ["The Qibo team"]
 license = "Apache-2.0"
 readme = "README.md"
-repository = "https://github.com/qiboteam/qibo-comb-optimisation/"
-packages = [{include="qibo_comb_optimisation", from="src"}]
+repository = "https://github.com/qiboteam/qiboopt/"
+packages = [{include="qiboopt", from="src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
@@ -41,7 +41,7 @@ pylint = "^3.3.5"
 testpaths = ['tests/']
 filterwarnings = ['ignore::RuntimeWarning']
 addopts = [
-  '--cov=qibo_comb_optimisation',
+  '--cov=qiboopt',
   '--cov-report=xml',
   '--cov-report=html',
   '--durations=60',
