@@ -132,8 +132,8 @@ def test_row_constraints(setup_tsp):
             row_constraint[two_to_one(v, j)] = 1
         lp = linear_problem(row_constraint, -1)
         tmp_qp = lp.square()
-        tmp_qp.multiply_scalar(penalty)
-        qp + tmp_qp
+        tmp_qp = tmp_qp * penalty
+        qp = qp + tmp_qp
 
     # Check that the row constraints are correctly applied to the QUBO
     expected_row_constraints = {(0, 0): -10, (0, 1): 10, (0, 2): 10, (0, 3): 0, (0, 4): 0, (0, 5): 0, (0, 6): 0,
@@ -162,8 +162,8 @@ def test_column_constraints(setup_tsp):
             col_constraint[two_to_one(v, j)] = 1
         lp = linear_problem(col_constraint, -1)
         tmp_qp = lp.square()
-        tmp_qp.multiply_scalar(penalty)
-        qp + tmp_qp
+        tmp_qp = tmp_qp * penalty
+        qp = qp + tmp_qp
 
     # Check that the column constraints are correctly applied to the QUBO
     expected_col_constraints = {(0, 0): -10, (0, 1): 0, (0, 2): 0, (0, 3): 10, (0, 4): 0, (0, 5): 0, (0, 6): 10,
