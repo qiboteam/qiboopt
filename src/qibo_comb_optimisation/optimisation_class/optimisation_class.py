@@ -254,23 +254,6 @@ class QUBO:
         """
         return self.__mul__(scalar)
 
-    # def __imul__(self, scalar):
-    #     """
-    #     Implements in-place scalar multiplication: qp *= 2
-    #
-    #     Args:
-    #         scalar (float): The scalar value to multiply by
-    #     Returns:
-    #         self: The modified QUBO object
-    #     """
-    #     if not isinstance(scalar, (int, float)):
-    #         raise TypeError("Can only multiply QUBO by scalar (int or float)")
-    #
-    #     for key in self.Qdict:
-    #         self.Qdict[key] *= scalar
-    #     self.offset *= scalar
-    #     return self
-
     def qubo_to_ising(self, constant=0.0):
         """Convert a QUBO problem to an Ising problem.
 
@@ -837,28 +820,6 @@ class linear_problem:
         self.A = np.atleast_2d(A)
         self.b = np.array([b]) if np.isscalar(b) else np.asarray(b)
         self.n = self.A.shape[1]
-
-    # def multiply_scalar(self, scalar_multiplier):
-    #     """Multiplies the matrix A and vector b by a scalar.
-
-    #     Args:
-    #         scalar (float): The scalar value to multiply the matrix A and vector b.
-
-    #     Example:
-    #         .. testcode::
-
-    #             A = np.array([[1, 2], [3, 4]])
-    #             b = np.array([5, 6])
-    #             lp = linear_problem(A, b)
-    #             lp.multiply_scalar(2)
-    #             print(lp.A)
-    #             # >>> [[2 4]
-    #             #      [6 8]]
-    #             print(lp.b)
-    #             # >>> [10 12]
-    #     """
-    #     self.A *= scalar_multiplier
-    #     self.b *= scalar_multiplier
 
     def __add__(self, other_linear):
         """
