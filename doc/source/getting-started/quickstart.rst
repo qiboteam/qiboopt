@@ -1,8 +1,8 @@
 Quickstart
 ----------
 
-Once installed, ``qibo-comb-optimisation`` allows the general user to solve QUBO problems with the built-in ``QUBO`` class.
-Along with the ``QUBO`` class, there are some combinatorial classes found in :class:`qibo_comb_optimisation.combinatorial_classes`.
+Once installed, ``qiboopt`` allows the general user to solve QUBO problems with the built-in ``QUBO`` class.
+Along with the ``QUBO`` class, there are some combinatorial classes found in :class:`qiboopt.combinatorial_classes`.
 
 Formuating a QUBO problem:
 
@@ -11,7 +11,7 @@ Formuating a QUBO problem:
 .. code-block:: python
 
    import networkx as nx
-   from qibo_comb_optimisation.combinatorial_classes.combinatorial_classes import Mis
+   from qiboopt.combinatorial_classes.combinatorial_classes import Mis
 
    g = nx.Graph()
    g.add_edges_from([(0, 1), (1, 2), (2, 0)])
@@ -33,7 +33,7 @@ Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp`
 
 .. code-block:: python
 
-   from qibo_comb_optimisation.optimisation_class.optimisation_class import QUBO
+   from qiboopt.optimisation_class.optimisation_class import QUBO
    # Train 2 layers of regular QAOA
    gammas = [0.1, 0.2]
    betas = [0.3, 0.4]
@@ -43,7 +43,7 @@ Use `XQAOA <https://arxiv.org/abs/2302.04479>`_ to solve the QUBO problems (``qp
 
 .. code-block:: python
 
-   from qibo_comb_optimisation.optimisation_class.optimisation_class import QUBO
+   from qiboopt.optimisation_class.optimisation_class import QUBO
    # Train 2 layers of XQAOA
    gammas = [0.1, 0.2]
    betas = [0.3, 0.4]
@@ -54,7 +54,7 @@ Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp`
 
 .. code-block:: python
 
-   from qibo_comb_optimisation.optimisation_class.optimisation_class import QUBO
+   from qiboopt.optimisation_class.optimisation_class import QUBO
    # Train 2 layers of regular QAOA with CVaR
    gammas = [0.1, 0.2]
    betas = [0.3, 0.4]

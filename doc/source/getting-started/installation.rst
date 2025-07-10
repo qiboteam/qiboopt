@@ -11,11 +11,11 @@ We recommend starting with a fresh virtual environment to avoid dependency confl
 Installing with pip
 -------------------
 
-The ``qibo-comb-optimisation`` package along with its dependencies can be installed through pip:
+The ``qiboopt`` package along with its dependencies can be installed through pip:
 
 .. code-block:: bash
 
-   pip install qibo_comb_optimisation
+   pip install qiboopt
 
 Installing from source
 ----------------------
@@ -24,6 +24,6 @@ The latest (development) version can be installed directly from the source repos
 
 .. code-block::
 
-    git clone https://github.com/qiboteam/qibo_comb_optimisation
-    cd qibo_comb_optimisation
+    git clone https://github.com/qiboteam/qiboopt
+    cd qiboopt
     pip install .
