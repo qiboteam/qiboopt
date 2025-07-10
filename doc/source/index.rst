@@ -32,6 +32,7 @@ Contents
     Qibosoq docs <https://qibo.science/qibosoq/stable/>
     Qibochem docs <https://qibo.science/qibochem/stable/>
     Qibotn docs <https://qibo.science/qibotn/stable/>
+    Qiboml docs <httls://qibo.science/qiboml/stable/>
     Qibo-cloud-backends docs <https://qibo.science/qibo-cloud-backends/stable/>
     Qiboopt docs <https://qibo.science/qiboopt/stable/>
 
