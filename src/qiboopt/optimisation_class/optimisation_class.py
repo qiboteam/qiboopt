@@ -903,7 +903,7 @@ class linear_problem:
         """Squares the linear problem to obtain a quadratic problem.
 
         Returns:
-            :class:`qibo_comb_optimisation.optimisation_class.optimisation_class.QUBO`: A quadratic problem
+            :class:`qiboopt.optimisation_class.optimisation_class.QUBO`: A quadratic problem
             corresponding to squaring the linear function.
 
         Example:

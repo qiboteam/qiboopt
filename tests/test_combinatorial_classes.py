@@ -3,14 +3,14 @@ import numpy as np
 import pytest
 from qibo.hamiltonians import SymbolicHamiltonian
 
-from qibo_comb_optimisation.combinatorial_classes.combinatorial_classes import (
+from qiboopt.combinatorial_classes.combinatorial_classes import (
     TSP,
     Mis,
     _calculate_two_to_one,
     _tsp_mixer,
     _tsp_phaser,
 )
-from qibo_comb_optimisation.optimisation_class.optimisation_class import (
+from qiboopt.optimisation_class.optimisation_class import (
     QUBO,
     linear_problem,
 )

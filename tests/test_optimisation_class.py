@@ -6,7 +6,7 @@ from qibo.noise import DepolarizingError, NoiseModel
 from qibo.optimizers import optimize as optimize
 from qibo.quantum_info import infidelity
 
-from qibo_comb_optimisation.optimisation_class.optimisation_class import (
+from qiboopt.optimisation_class.optimisation_class import (
     QUBO,
     linear_problem,
 )
