@@ -39,7 +39,7 @@ class QUBO:
                         where keys are variables of the model and values are biases.
                     J (dict[(variable, variable), bias]): Quadratic biases as a dict of the form
                         {(u, v): bias, ...}, where keys are 2-tuples of variables of the model
-                        and values are optimisation_class biases associated with the pair of
+                        and values are opt_class biases associated with the pair of
                         variables (the interaction).
 
         Example:
@@ -59,10 +59,10 @@ class QUBO:
         self.offset = offset
         if len(args) == 1 and isinstance(args[0], dict):
             self.Qdict = args[0]
-            self.n = 0
-            for key in self.Qdict:
-                self.n = max([self.n, key[0], key[1]])
-            self.n += 1
+            if self.Qdict:
+                self.n = max(max(key) for key in self.Qdict) + 1
+            else:
+                self.n = 0
             self.h, self.J, self.ising_constant = self.qubo_to_ising()
         elif len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], dict):
             h = args[0]
@@ -72,12 +72,12 @@ class QUBO:
             self.Qdict = {(v, v): 2.0 * bias for v, bias in h.items()}
             self.n = 0
 
-            # next the optimisation_class biases
+            # next the opt_class biases
             for (u, v), bias in self.Qdict.items():
-                if bias != 0:
+                if bias:
                     self.Qdict[(u, v)] = 4.0 * bias
-                    self.Qdict[(u, u)] = self.Qdict.setdefault((u, u), 0) - 2.0 * bias
-                    self.Qdict[(v, v)] = self.Qdict.setdefault((v, v), 0) - 2.0 * bias
+                    self.Qdict[(u, u)] = self.Qdict.get((u, u), 0) - 2.0 * bias
+                    self.Qdict[(v, v)] = self.Qdict.get((v, v), 0) - 2.0 * bias
                     self.n = max([self.n, u, v])
             self.n += 1
             # finally adjust the offset based on QUBO definitions rather than Ising formulation
@@ -95,15 +95,16 @@ class QUBO:
         This step encodes the interaction terms into the quantum circuit.
         """
         # Apply R_z gates for diagonal terms (h_i)
-        for i in range(self.n):
-            circuit.add(gates.RZ(i, -2 * gamma * self.h[i]))  # -2 * gamma * h_i
+        circuit.add(
+            gates.RZ(i, -2 * gamma * self.h[i]) for i in range(self.n)
+        )  # -2 * gamma * h_i
 
         # Apply CNOT and R_z for off-diagonal terms (J_ij)
         for i in range(self.n):
             for j in range(self.n):
                 if (i, j) in self.J:
                     weight = self.J[(i, j)]
-                    if weight != 0:
+                    if weight:
                         circuit.add(gates.CNOT(i, j))
                         circuit.add(
                             gates.RZ(j, -2 * gamma * weight)
@@ -257,7 +258,7 @@ class QUBO:
     def qubo_to_ising(self, constant=0.0):
         """Convert a QUBO problem to an Ising problem.
 
-        Maps a optimisation_class unconstrained binary optimisation (QUBO) problem defined over
+        Maps a quadratic unconstrained binary optimisation (QUBO) problem defined over
         binary variables (0 or 1 values), where the linear term is contained along x' Qx
         the diagonal of Q, to an Ising model defined on spins (variables with {-1, +1} values).
         Returns `h` and `J` that define the Ising model as well as `constant` representing the
@@ -292,14 +293,14 @@ class QUBO:
 
         for (u, v), bias in self.Qdict.items():
             if u == v:
-                h[u] = h.setdefault(u, 0) + bias / 2
+                h[u] = h.get(u, 0) + bias / 2
                 linear_offset += bias
 
             else:
-                if bias != 0.0:
+                if bias:
                     J[(u, v)] = bias / 4
-                h[u] = h.setdefault(u, 0) + bias / 4
-                h[v] = h.setdefault(v, 0) + bias / 4
+                h[u] = h.get(u, 0) + bias / 4
+                h[v] = h.get(v, 0) + bias / 4
                 quadratic_offset += bias
 
         constant += 0.5 * linear_offset + 0.25 * quadratic_offset
@@ -350,13 +351,15 @@ class QUBO:
         """
         f_value = self.offset
         for i in range(self.n):
-            if x[i] != 0:
-                # manage diagonal term first
-                if (i, i) in self.Qdict:
-                    f_value += self.Qdict[(i, i)]
-                for j in range(i + 1, self.n):
-                    if x[j] != 0:
-                        f_value += self.Qdict.get((i, j), 0) + self.Qdict.get((j, i), 0)
+            if x[i]:
+                f_value += (
+                    self.Qdict[(i, i)] if (i, i) in self.Qdict else 0.0
+                )  # manage diagonal term first
+                f_value += sum(
+                    self.Qdict.get((i, j), 0) + self.Qdict.get((j, i), 0)
+                    for j in range(i + 1, self.n)
+                    if x[j]
+                )
         return f_value
 
     def evaluate_grad_f(self, x):
@@ -479,13 +482,13 @@ class QUBO:
         Returns:
             self.Qdict (dict): A dictionary and also update Qdict
         """
-        for i in range(self.n):
-            for j in range(i, self.n):
-                if (j, i) in self.Qdict:
-                    self.Qdict[(i, j)] = self.Qdict.get((i, j), 0) + self.Qdict.pop(
-                        (j, i)
-                    )
-                    self.Qdict.pop((j, i), None)
+        Qdict = {
+            (i, j): self.Qdict.get((i, j), 0) + self.Qdict.get((j, i), 0)
+            for i in range(self.n)
+            for j in range(i, self.n)
+            if (i, j) in self.Qdict or (j, i) in self.Qdict
+        }
+        self.Qdict = Qdict
         return self.Qdict
 
     def qubo_to_qaoa_circuit(self, gammas, betas, alphas=None, custom_mixer=None):
@@ -532,7 +535,7 @@ class QUBO:
     ):
         """
         Constructs the QAOA or XQAOA circuit with optional parameters for the mixers or phases before using a classical
-        optimizer to search for the optimal parameters which minimise the cost function (either expected value or
+        optimiser to search for the optimal parameters which minimise the cost function (either expected value or
         Conditional Variance at Risk (CVaR).
 
         Args:
@@ -558,7 +561,7 @@ class QUBO:
         Returns:
             Tuple[float, List[float], dict, :class:`qibo.models.Circuit`, dict]: A tuple containing:
                 - best (float): The lowest cost value achieved.
-                - params (List[float]): Optimized QAOA parameters.
+                - params (List[float]): Optimised QAOA parameters.
                 - extra (dict): Additional metadata (e.g., convergence info).
                 - circuit (:class:`qibo.models.Circuit`): Final circuit used for evaluation.
                 - frequencies (dict): Bitstring outcome frequencies from measurement.
@@ -903,7 +906,7 @@ class linear_problem:
         """Squares the linear problem to obtain a quadratic problem.
 
         Returns:
-            :class:`qibo_comb_optimisation.optimisation_class.optimisation_class.QUBO`: A quadratic problem
+            :class:`qiboopt.opt_class.opt_class.QUBO`: A quadratic problem
             corresponding to squaring the linear function.
 
         Example:
