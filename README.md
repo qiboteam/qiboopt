@@ -6,8 +6,7 @@ For the complete documentation on qiboopt, please refer to [qiboopt](https://qib
 
 Install first the package dependencies with the following commands.
 
-We recommend to start with a fresh virtual environment to avoid dependencies
-conflicts with previously installed packages.
+We recommend to start with a fresh virtual environment to avoid dependency conflicts with previously installed packages.
 
 ```bash
    $ python -m venv ./env
@@ -41,6 +40,7 @@ Formuating a QUBO problem:
 ```
 - Shortest Vector Problem:
 ```python
+	from qiboopt.opt_class.opt_class import QUBO
 	Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
 	qp = QUBO(0, Qdict)
 
@@ -67,7 +67,8 @@ Use [XQAOA](https://arxiv.org/abs/2302.04479) to solve the QUBO problems (`qp`):
 	output = qp.train_QAOA(gammas=gammas, betas=betas, alphas=alphas)
 ```
 
-Use [QAOA](https://arxiv.org/abs/1709.03489) to solve the QUBO problems (`qp`) using Conditional Variance at Risk (CVaR) loss function:
+Use [QAOA](https://arxiv.org/abs/1709.03489) to solve the QUBO problems (`qp`) using Conditional Variance at Risk
+(CVaR) loss function:
 ```python
 	from qiboopt.opt_class.opt_class import QUBO
 	# Train 2 layers of regular QAOA with CVaR
