@@ -23,8 +23,8 @@ The qiboopt package can be installed through pip:
 
 ## Quickstart
 
-Once installed, the qiboopt allows the general user to solve QUBO problems with the built-in QUBO class.
-Along with the QUBO class, there are some combinatorial classes found in :class:`qiboopt.combinatorial_classes`.
+Once installed, `qiboopt` allows the general user to solve QUBO problems with the built-in `QUBO` class.
+Along with the `QUBO` class, there are some combinatorial classes found in `qiboopt.combinatorial_classes`.
 
 Formuating a QUBO problem:
 
@@ -50,7 +50,7 @@ Formuating a QUBO problem:
 
 Use [QAOA](https://arxiv.org/abs/1709.03489) to solve the QUBO problems (`qp`):
 ```python
-	from qiboopt.opt_class.optimisation_class import QUBO
+	from qiboopt.opt_class.opt_class import QUBO
 	# Train 2 layers of regular QAOA
 	gammas = [0.1, 0.2]
 	betas = [0.3, 0.4]
@@ -59,7 +59,7 @@ Use [QAOA](https://arxiv.org/abs/1709.03489) to solve the QUBO problems (`qp`):
 
 Use [XQAOA](https://arxiv.org/abs/2302.04479) to solve the QUBO problems (`qp`):
 ```python
-	from qiboopt.opt_class.optimisation_class import QUBO
+	from qiboopt.opt_class.opt_class import QUBO
 	# Train 2 layers of XQAOA
 	gammas = [0.1, 0.2]
 	betas = [0.3, 0.4]
@@ -69,7 +69,7 @@ Use [XQAOA](https://arxiv.org/abs/2302.04479) to solve the QUBO problems (`qp`):
 
 Use [QAOA](https://arxiv.org/abs/1709.03489) to solve the QUBO problems (`qp`) using Conditional Variance at Risk (CVaR) loss function:
 ```python
-	from qiboopt.opt_class.optimisation_class import QUBO
+	from qiboopt.opt_class.opt_class import QUBO
 	# Train 2 layers of regular QAOA with CVaR
 	gammas = [0.1, 0.2]
 	betas = [0.3, 0.4]
