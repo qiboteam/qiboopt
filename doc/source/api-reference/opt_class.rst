@@ -1,4 +1,4 @@
-.. _optimisation_class:
+.. _opt_class:
 
 Optimisation class
 ------------------
@@ -15,7 +15,7 @@ QUBO, short for Quadratic Unconstrained Binary Optimisation, are a class of prob
 When formulated carefully, QUBO problems can be mapped to solve a host of optimisation problems such as :ref:`Travelling Salesman Problem <TSP>`, :ref:`Maximum Independent Set <MIS>`, Quadratic Assignment Problem, Maximum Clique problem, Maximum Cut problem, etc.
 
 
-.. autoclass:: qiboopt.optimisation_class.optimisation_class.QUBO
+.. autoclass:: qiboopt.opt_class.opt_class.QUBO
     :members:
     :member-order: bysource
 
@@ -27,6 +27,6 @@ Linear Problems
 
 Linear problem write up goes here.
 
-.. autoclass:: qiboopt.optimisation_class.optimisation_class.linear_problem
+.. autoclass:: qiboopt.opt_class.opt_class.linear_problem
     :members:
     :member-order: bysource

@@ -6,4 +6,4 @@ API Reference
     :maxdepth: 1
 
     combinatorial_classes
-    optimisation_class
+    opt_class

@@ -33,7 +33,7 @@ Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp`
 
 .. code-block:: python
 
-   from qiboopt.optimisation_class.optimisation_class import QUBO
+   from qiboopt.opt_class.opt_class import QUBO
    # Train 2 layers of regular QAOA
    gammas = [0.1, 0.2]
    betas = [0.3, 0.4]
@@ -43,7 +43,7 @@ Use `XQAOA <https://arxiv.org/abs/2302.04479>`_ to solve the QUBO problems (``qp
 
 .. code-block:: python
 
-   from qiboopt.optimisation_class.optimisation_class import QUBO
+   from qiboopt.opt_class.opt_class import QUBO
    # Train 2 layers of XQAOA
    gammas = [0.1, 0.2]
    betas = [0.3, 0.4]
@@ -54,7 +54,7 @@ Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp`
 
 .. code-block:: python
 
-   from qiboopt.optimisation_class.optimisation_class import QUBO
+   from qiboopt.opt_class.opt_class import QUBO
    # Train 2 layers of regular QAOA with CVaR
    gammas = [0.1, 0.2]
    betas = [0.3, 0.4]
