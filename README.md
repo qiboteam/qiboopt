@@ -1,4 +1,4 @@
-# Qibo comb optimisation
+# Qiboopt
 
 For the complete documentation on qiboopt, please refer to [qiboopt](https://qibo.science/qiboopt/latest/).
 
