@@ -41,6 +41,7 @@ class QUBO:
                         {(u, v): bias, ...}, where keys are 2-tuples of variables of the model
                         and values are optimisation_class biases associated with the pair of
                         variables (the interaction).
+
         Example:
             .. testcode::
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
@@ -131,8 +132,7 @@ class QUBO:
 
         # Apply initial Hadamard gates (uniform superposition)
         circuit = Circuit(self.n, density_matrix=True)
-        for i in range(self.n):
-            circuit.add(gates.H(i))
+        circuit.add(gates.H(i) for i in range(self.n))
 
         for layer in range(p):
             self._phase_separation(
@@ -179,44 +179,80 @@ class QUBO:
                 else:
                     self._default_mixer(circuit, betas[layer])
 
-        for i in range(self.n):
-            circuit.add(gates.M(i))
+        circuit.add(gates.M(i) for i in range(self.n))
 
         return circuit
 
-    def multiply_scalar(self, scalar_multiplier):
-        """Multiplies all the quadratic coefficients by a scalar value.
-
+    def __add__(self, other_quadratic):
+        """
         Args:
-            scalar_multiplier (float): The scalar value by which to multiply the coefficients.
+            other_Quadratic: another QUBO class object
+        Returns:
+            QUBO: A new QUBO object representing the sum of self and other_Quadratic
 
         Example:
             .. testcode::
+                Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+                qp1 = QUBO(0, Qdict1)
+                Qdict2 = {(0, 0): 2.0, (1, 1): 1.0}
+                qp2 = QUBO(1, Qdict2)
+                qp3 = qp1 + qp2
+                print(qp3.Qdict)
+                # >>> {(0, 0): 3.0, (0, 1): 0.5, (1, 1): 0.0}
+                print(qp3.offset)
+                # >>> 1.0
+                print(qp1.Qdict)  # Original qp1 unchanged
+                # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+        """
+        # Create a deep copy of the current QUBO's Qdict
+        new_Qdict = self.Qdict.copy()
 
+        # Add the other QUBO's coefficients
+        for key, value in other_quadratic.Qdict.items():
+            new_Qdict[key] = new_Qdict.get(key, 0.0) + value
+
+        # Calculate the new offset
+        new_offset = self.offset + other_quadratic.offset
+
+        # Create and return a new QUBO object
+        return self.__class__(new_offset, new_Qdict)
+
+    def __mul__(self, scalar):
+        """
+        Implements scalar multiplication: qp * 2
+
+        Args:
+            scalar (float): The scalar value to multiply by
+        Returns:
+            QUBO: A new QUBO object with all coefficients multiplied by the scalar
+
+        Example:
+            .. testcode::
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
-                qp.multiply_scalar(2)
-                print(qp.Qdict)
+                qp2 = qp * 2
+                print(qp2.Qdict)
                 # >>> {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
+                print(qp.Qdict)  # Original unchanged
+                # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
         """
-        for key in self.Qdict:
-            self.Qdict[key] *= scalar_multiplier
-        self.offset *= scalar_multiplier
+        if not isinstance(scalar, (int, float)):
+            raise TypeError("Can only multiply QUBO by scalar (int or float)")
 
-    def __add__(self, other_Quadratic):
+        new_Qdict = {key: value * scalar for key, value in self.Qdict.items()}
+        new_offset = self.offset * scalar
+        return self.__class__(new_offset, new_Qdict)
+
+    def __rmul__(self, scalar):
         """
+        Implements right scalar multiplication: 2 * qp
+
         Args:
-            other_Quadratic: another optimisation_class class object
+            scalar (float): The scalar value to multiply by
         Returns:
-            Updating the optimisation_class function to obtain the sum
+            QUBO: A new QUBO object with all coefficients multiplied by the scalar
         """
-        for key in other_Quadratic.Qdict:
-            if key in self.Qdict:
-                self.Qdict[key] += other_Quadratic.Qdict[key]
-            else:
-                self.Qdict[key] = other_Quadratic.Qdict[key]
-        self.n = max(self.n, other_Quadratic.n)
-        self.offset += other_Quadratic.offset
+        return self.__mul__(scalar)
 
     def qubo_to_ising(self, constant=0.0):
         """Convert a QUBO problem to an Ising problem.
@@ -768,12 +804,15 @@ class linear_problem:
             A2 = np.array([[1, 1], [1, 1]])
             b2 = np.array([1, 1])
             lp2 = linear_problem(A2, b2)
-            lp1 + lp2
-            print(lp1.A)
+            lp3 = lp1 + lp2
+            print(lp3.A)
             # >>> [[2 3]
             #      [4 5]]
-            print(lp1.b)
+            print(lp3.b)
             # >>> [6 7]
+            print(lp1.A)  # Original lp1 unchanged
+            # >>> [[1 2]
+            #      [3 4]]
     """
 
     def __init__(self, A, b):
@@ -782,31 +821,61 @@ class linear_problem:
         self.b = np.array([b]) if np.isscalar(b) else np.asarray(b)
         self.n = self.A.shape[1]
 
-    def multiply_scalar(self, scalar_multiplier):
-        """Multiplies the matrix A and vector b by a scalar.
+    def __add__(self, other_linear):
+        """
+        Args:
+            other_linear: another linear_problem class object
+        Returns:
+            linear_problem: A new linear_problem object representing the sum of self and other_linear
+        """
+        # Create copies of the matrices and vectors
+        new_A = self.A.copy() + other_linear.A
+        new_b = self.b.copy() + other_linear.b
+
+        # Create and return a new linear_problem object
+        return self.__class__(new_A, new_b)
+
+    def __mul__(self, scalar):
+        """
+        Implements scalar multiplication: lp * 2
 
         Args:
-            scalar (float): The scalar value to multiply the matrix A and vector b.
+            scalar (float): The scalar value to multiply by
+        Returns:
+            linear_problem: A new linear_problem object with A and b multiplied by the scalar
 
         Example:
             .. testcode::
-
                 A = np.array([[1, 2], [3, 4]])
                 b = np.array([5, 6])
                 lp = linear_problem(A, b)
-                lp.multiply_scalar(2)
-                print(lp.A)
+                lp2 = lp * 2
+                print(lp2.A)
                 # >>> [[2 4]
                 #      [6 8]]
-                print(lp.b)
+                print(lp2.b)
                 # >>> [10 12]
+                print(lp.A)  # Original unchanged
+                # >>> [[1 2]
+                #      [3 4]]
         """
-        self.A *= scalar_multiplier
-        self.b *= scalar_multiplier
+        if not isinstance(scalar, (int, float)):
+            raise TypeError("Can only multiply linear_problem by scalar (int or float)")
 
-    def __add__(self, other_linear):
-        self.A += other_linear.A
-        self.b += other_linear.b
+        new_A = self.A.copy() * scalar
+        new_b = self.b.copy() * scalar
+        return self.__class__(new_A, new_b)
+
+    def __rmul__(self, scalar):
+        """
+        Implements right scalar multiplication: 2 * lp
+
+        Args:
+            scalar (float): The scalar value to multiply by
+        Returns:
+            linear_problem: A new linear_problem object with A and b multiplied by the scalar
+        """
+        return self.__mul__(scalar)
 
     def evaluate_f(self, x):
         """Evaluates the linear function Ax + b at a given point x.
@@ -852,8 +921,9 @@ class linear_problem:
         quadraticpart = self.A.T @ self.A + np.diag(2 * (self.b @ self.A))
         offset = np.dot(self.b, self.b)
         num_rows, num_cols = quadraticpart.shape
-        Qdict = {}
-        for i in range(num_rows):
-            for j in range(num_cols):
-                Qdict[(i, j)] = quadraticpart[i, j]
+        Qdict = {
+            (i, j): quadraticpart[i, j]
+            for i in range(num_rows)
+            for j in range(num_cols)
+        }
         return QUBO(offset, Qdict)

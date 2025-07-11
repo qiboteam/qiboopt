@@ -261,8 +261,8 @@ class TSP:
                 row_constraint[self.two_to_one[v, j]] = 1
             lp = linear_problem(row_constraint, -1)
             tmp_qp = lp.square()
-            tmp_qp.multiply_scalar(penalty)
-            qp + tmp_qp
+            tmp_qp = tmp_qp * penalty
+            qp = qp + tmp_qp
 
         # column constraints
         for j in range(self.num_cities):
@@ -271,8 +271,8 @@ class TSP:
                 col_constraint[self.two_to_one[v, j]] = 1
             lp = linear_problem(col_constraint, -1)
             tmp_qp = lp.square()
-            tmp_qp.multiply_scalar(penalty)
-            qp + tmp_qp
+            tmp_qp = tmp_qp * penalty
+            qp = qp + tmp_qp
         return qp
 
 
