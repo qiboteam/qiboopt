@@ -42,15 +42,15 @@ def _tsp_phaser(distance_matrix, backend=None):
     num_cities = distance_matrix.shape[0]
     two_to_one = _calculate_two_to_one(num_cities)
     form = 0
-    for i in range(num_cities):
-        for u in range(num_cities):
-            for v in range(num_cities):
-                if u != v:
-                    form += (
-                        distance_matrix[u, v]
-                        * Z(int(two_to_one[u, i]))
-                        * Z(int(two_to_one[v, (i + 1) % num_cities]))
-                    )
+    form = sum(
+        distance_matrix[u, v]
+        * Z(int(two_to_one[u, i]))
+        * Z(int(two_to_one[v, (i + 1) % num_cities]))
+        for i in range(num_cities)
+        for u in range(num_cities)
+        for v in range(num_cities)
+        if u != v
+    )
     ham = SymbolicHamiltonian(form, backend=backend)
     return ham
 
@@ -96,19 +96,33 @@ def _tsp_mixer(num_cities, backend=None):
         return X(int(two_to_one[u, i])) - 1j * Y(int(two_to_one[u, i]))
 
     form = 0
-    for i in range(num_cities):
-        for u in range(num_cities):
-            for v in range(num_cities):
-                if u != v:
-                    form += splus(u, i) * splus(v, (i + 1) % num_cities) * sminus(
-                        u, (i + 1) % num_cities
-                    ) * sminus(v, i) + sminus(u, i) * sminus(
-                        v, (i + 1) % num_cities
-                    ) * splus(
-                        u, (i + 1) % num_cities
-                    ) * splus(
-                        v, i
-                    )
+    form = sum(
+        splus(u, i)
+        * splus(v, (i + 1) % num_cities)
+        * sminus(u, (i + 1) % num_cities)
+        * sminus(v, i)
+        + sminus(u, i)
+        * sminus(v, (i + 1) % num_cities)
+        * splus(u, (i + 1) % num_cities)
+        * splus(v, i)
+        for i in range(num_cities)
+        for u in range(num_cities)
+        for v in range(num_cities)
+        if u != v
+    )
+    # for i in range(num_cities):
+    #     for u in range(num_cities):
+    #         for v in range(num_cities):
+    #             if u != v:
+    #                 form += splus(u, i) * splus(v, (i + 1) % num_cities) * sminus(
+    #                     u, (i + 1) % num_cities
+    #                 ) * sminus(v, i) + sminus(u, i) * sminus(
+    #                     v, (i + 1) % num_cities
+    #                 ) * splus(
+    #                     u, (i + 1) % num_cities
+    #                 ) * splus(
+    #                     v, i
+    #                 )
     ham = SymbolicHamiltonian(form, backend=backend)
     return ham
 
@@ -242,16 +256,16 @@ class TSP:
         Returns:
             QUBO: A QUBO object for the TSP with penalties applied.
         """
-        q_dict = {}
-        for u in range(self.num_cities):
-            for v in range(self.num_cities):
-                if v != u:
-                    for j in range(self.num_cities):
-                        # this is the objective function
-                        q_dict[
-                            self.two_to_one[u, j],
-                            self.two_to_one[v, (j + 1) % self.num_cities],
-                        ] = self.distance_matrix[u, v]
+        q_dict = {
+            (
+                self.two_to_one[u, j],
+                self.two_to_one[v, (j + 1) % self.num_cities],
+            ): self.distance_matrix[u, v]
+            for u in range(self.num_cities)
+            for v in range(self.num_cities)
+            for j in range(self.num_cities)
+            if v != u
+        }
         qp = QUBO(0, q_dict)
 
         # row constraints
@@ -320,11 +334,8 @@ class Mis:
             QUBO (:class:`qiboopt.opt_class.opt_class.QUBO`): A QUBO object for the
             Maximal Independent Set (MIS) problem.
         """
-        q_dict = {}
-        for i in range(self.n):
-            q_dict[(i, i)] = -1
-        for u, v in self.g.edges:
-            q_dict[(u, v)] = penalty
+        q_dict = {(i, i): -1 for i in range(self.n)}
+        q_dict = {**q_dict, **{(u, v): penalty for u, v in self.g.edges}}
         return QUBO(0, q_dict)
 
     def __str__(self):
