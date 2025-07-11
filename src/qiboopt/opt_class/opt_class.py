@@ -39,7 +39,7 @@ class QUBO:
                         where keys are variables of the model and values are biases.
                     J (dict[(variable, variable), bias]): Quadratic biases as a dict of the form
                         {(u, v): bias, ...}, where keys are 2-tuples of variables of the model
-                        and values are optimisation_class biases associated with the pair of
+                        and values are opt_class biases associated with the pair of
                         variables (the interaction).
 
         Example:
@@ -72,7 +72,7 @@ class QUBO:
             self.Qdict = {(v, v): 2.0 * bias for v, bias in h.items()}
             self.n = 0
 
-            # next the optimisation_class biases
+            # next the opt_class biases
             for (u, v), bias in self.Qdict.items():
                 if bias != 0:
                     self.Qdict[(u, v)] = 4.0 * bias
@@ -257,7 +257,7 @@ class QUBO:
     def qubo_to_ising(self, constant=0.0):
         """Convert a QUBO problem to an Ising problem.
 
-        Maps a optimisation_class unconstrained binary optimisation (QUBO) problem defined over
+        Maps a quadratic unconstrained binary optimisation (QUBO) problem defined over
         binary variables (0 or 1 values), where the linear term is contained along x' Qx
         the diagonal of Q, to an Ising model defined on spins (variables with {-1, +1} values).
         Returns `h` and `J` that define the Ising model as well as `constant` representing the
@@ -532,7 +532,7 @@ class QUBO:
     ):
         """
         Constructs the QAOA or XQAOA circuit with optional parameters for the mixers or phases before using a classical
-        optimizer to search for the optimal parameters which minimise the cost function (either expected value or
+        optimiser to search for the optimal parameters which minimise the cost function (either expected value or
         Conditional Variance at Risk (CVaR).
 
         Args:
@@ -558,7 +558,7 @@ class QUBO:
         Returns:
             Tuple[float, List[float], dict, :class:`qibo.models.Circuit`, dict]: A tuple containing:
                 - best (float): The lowest cost value achieved.
-                - params (List[float]): Optimized QAOA parameters.
+                - params (List[float]): Optimised QAOA parameters.
                 - extra (dict): Additional metadata (e.g., convergence info).
                 - circuit (:class:`qibo.models.Circuit`): Final circuit used for evaluation.
                 - frequencies (dict): Bitstring outcome frequencies from measurement.
@@ -903,7 +903,7 @@ class linear_problem:
         """Squares the linear problem to obtain a quadratic problem.
 
         Returns:
-            :class:`qiboopt.optimisation_class.optimisation_class.QUBO`: A quadratic problem
+            :class:`qiboopt.opt_class.opt_class.QUBO`: A quadratic problem
             corresponding to squaring the linear function.
 
         Example:

@@ -9,7 +9,7 @@ from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models.circuit import Circuit
 from qibo.symbols import X, Y, Z
 
-from qiboopt.optimisation_class.optimisation_class import (
+from qiboopt.opt_class.opt_class import (
     QUBO,
     linear_problem,
 )
@@ -304,7 +304,7 @@ class Mis:
         Args:
             g: A networkx object
         Returns:
-            :class:`qiboopt.optimisation_class.optimisation_class.QUBO` representation
+            :class:`qiboopt.opt_class.opt_class.QUBO` representation
         """
         self.g = g
         self.n = g.number_of_nodes()
@@ -317,7 +317,7 @@ class Mis:
             penalty (float): The penalty parameter for constraint violations.
 
         Returns:
-            QUBO (:class:`qiboopt.optimisation_class.optimisation_class.QUBO`): A QUBO object for the
+            QUBO (:class:`qiboopt.opt_class.opt_class.QUBO`): A QUBO object for the
             Maximal Independent Set (MIS) problem.
         """
         q_dict = {}

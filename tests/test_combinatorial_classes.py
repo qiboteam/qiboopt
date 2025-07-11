@@ -10,7 +10,7 @@ from qiboopt.combinatorial_classes.combinatorial_classes import (
     _tsp_mixer,
     _tsp_phaser,
 )
-from qiboopt.optimisation_class.optimisation_class import (
+from qiboopt.opt_class.opt_class import (
     QUBO,
     linear_problem,
 )
