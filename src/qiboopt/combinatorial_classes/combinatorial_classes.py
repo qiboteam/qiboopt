@@ -9,7 +9,7 @@ from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models.circuit import Circuit
 from qibo.symbols import X, Y, Z
 
-from qibo_comb_optimisation.optimisation_class.optimisation_class import (
+from qiboopt.optimisation_class.optimisation_class import (
     QUBO,
     linear_problem,
 )
@@ -289,7 +289,7 @@ class Mis:
         .. testcode::
 
             import networkx as nx
-            from qibo_comb_optimisation.combinatorial_classes.combinatorial_classes import Mis
+            from qiboopt.combinatorial_classes.combinatorial_classes import Mis
 
             g = nx.Graph()
             g.add_edges_from([(0, 1), (1, 2), (2, 0)])
@@ -304,7 +304,7 @@ class Mis:
         Args:
             g: A networkx object
         Returns:
-            :class:`qibo_comb_optimisation.optimisation_class.optimisation_class.QUBO` representation
+            :class:`qiboopt.optimisation_class.optimisation_class.QUBO` representation
         """
         self.g = g
         self.n = g.number_of_nodes()
@@ -317,7 +317,7 @@ class Mis:
             penalty (float): The penalty parameter for constraint violations.
 
         Returns:
-            QUBO (:class:`qibo_comb_optimisation.optimisation_class.optimisation_class.QUBO`): A QUBO object for the
+            QUBO (:class:`qiboopt.optimisation_class.optimisation_class.QUBO`): A QUBO object for the
             Maximal Independent Set (MIS) problem.
         """
         q_dict = {}
