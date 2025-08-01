@@ -16,46 +16,58 @@ from qibo.symbols import Z
 
 
 class QUBO:
+    """Initializes a ``QUBO`` class. The ``QUBO`` class can be multiplied by a scalar factor, and multiple ``QUBO``
+    instances can be added together.
+
+    Example:
+        .. testcode::
+
+            Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+            qp1 = QUBO(0, Qdict1)
+            print(qp.Qdict1)
+            # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+            qp1 *= 2
+            print(qp1.Qdict)
+            # >>> {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
+
+            Qdict2 = {(0, 0): 2.0, (1, 1): 1.0}
+            qp2 = QUBO(1, Qdict2)
+            qp3 = qp1 + qp2
+            print(qp3.Qdict)
+            # >>> {(0, 0): 4.0, (0, 1): 1.0, (1, 1): -1.0}
+            print(qp3.offset)
+            # >>> 1.0
+
+            h = {3: 1.0, 4: 0.82, 5: 0.23}
+            J = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+            qp = QUBO(0, h, J)
+            print(qp.Qdict)
+            # >>> ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
+
+
+    Args:
+        offset (float): The constant offset of the QUBO problem.
+        args (dict): Input for parameters for QUBO or Ising formulation. If ``len(args) == 1``,
+            ``args`` has to be a dictionary representing the quadratic coefficient assigned to the ``QUBO.QDict``
+            attribute, which represents the :math:`Q` matrix. If ``len(args) == 2``, both objects have to be
+            dictionaries representing the inputs :math:`h` and :math:`J` for an Ising formulation.
+
+            We have the following relation:
+
+            .. math::
+
+                s'  J  s + h'  s = \\text{offset} + x'  Q x
+
+            where
+                h (dict): Linear biases as a dictionary of the form ``{v: bias, ...}``, where keys are variables of the
+                    model and values are biases.
+                J (dict): Quadratic biases as a dictionary of the form ``{(u, v): bias, ...}``, where keys are
+                    two-tuples of variables of the model and values are biases associated with the interaction between
+                    the pair of variables.
+
+    """
 
     def __init__(self, offset, *args):
-        """Initializes the QUBO class
-
-        Args:
-            offset (float): The constant offset of the QUBO problem.
-            args (dict or np.ndarray): Input for parameters for QUBO or Ising formulation.
-                 If len(args)==1, args needs to be a dictionary representing the quadratic
-                 coefficient assigned to the QDict object. It represents the matrix Q.
-                 If len(args)==2, arg needs to be a list of two dictionaries representing the
-                 inputs h and J for Ising formulation.
-
-                 We have the following relation
-
-                    .. math::
-
-                     s'  J  s + h'  s = offset + x'  Q x
-
-                 where
-                    h (dict[variable, bias]): Linear biases as a dict of the form {v: bias, ...},
-                        where keys are variables of the model and values are biases.
-                    J (dict[(variable, variable), bias]): Quadratic biases as a dict of the form
-                        {(u, v): bias, ...}, where keys are 2-tuples of variables of the model
-                        and values are opt_class biases associated with the pair of
-                        variables (the interaction).
-
-        Example:
-            .. testcode::
-                Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp = QUBO(0, Qdict)
-                print(qp.Qdict)
-                # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-
-                h = {3: 1.0, 4: 0.82, 5: 0.23}
-                J = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp = QUBO(0, h, J)
-                print(qp.Qdict)
-                # >>> ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
-        """
-
         self.offset = offset
         if len(args) == 1 and isinstance(args[0], dict):
             self.Qdict = args[0]
@@ -88,6 +100,31 @@ class QUBO:
         # Define other class attributes
         self.n_layers = None
         self.num_betas = None
+
+    def __add__(self, other_quadratic):
+        # Create a deep copy of the current QUBO's Qdict
+        new_Qdict = self.Qdict.copy()
+
+        # Add the other QUBO's coefficients
+        for key, value in other_quadratic.Qdict.items():
+            new_Qdict[key] = new_Qdict.get(key, 0.0) + value
+
+        # Calculate the new offset
+        new_offset = self.offset + other_quadratic.offset
+
+        # Create and return a new QUBO object
+        return self.__class__(new_offset, new_Qdict)
+
+    def __mul__(self, scalar):
+        if not isinstance(scalar, (int, float)):
+            raise TypeError("Can only multiply QUBO by scalar (int or float)")
+
+        new_Qdict = {key: value * scalar for key, value in self.Qdict.items()}
+        new_offset = self.offset * scalar
+        return self.__class__(new_offset, new_Qdict)
+
+    def __rmul__(self, scalar):
+        return self.__mul__(scalar)
 
     def _phase_separation(self, circuit, gamma):
         """
@@ -184,107 +221,25 @@ class QUBO:
 
         return circuit
 
-    def __add__(self, other_quadratic):
-        """
-        Args:
-            other_Quadratic: another QUBO class object
-        Returns:
-            QUBO: A new QUBO object representing the sum of self and other_Quadratic
-
-        Example:
-            .. testcode::
-                Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp1 = QUBO(0, Qdict1)
-                Qdict2 = {(0, 0): 2.0, (1, 1): 1.0}
-                qp2 = QUBO(1, Qdict2)
-                qp3 = qp1 + qp2
-                print(qp3.Qdict)
-                # >>> {(0, 0): 3.0, (0, 1): 0.5, (1, 1): 0.0}
-                print(qp3.offset)
-                # >>> 1.0
-                print(qp1.Qdict)  # Original qp1 unchanged
-                # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-        """
-        # Create a deep copy of the current QUBO's Qdict
-        new_Qdict = self.Qdict.copy()
-
-        # Add the other QUBO's coefficients
-        for key, value in other_quadratic.Qdict.items():
-            new_Qdict[key] = new_Qdict.get(key, 0.0) + value
-
-        # Calculate the new offset
-        new_offset = self.offset + other_quadratic.offset
-
-        # Create and return a new QUBO object
-        return self.__class__(new_offset, new_Qdict)
-
-    def __mul__(self, scalar):
-        """
-        Implements scalar multiplication: qp * 2
-
-        Args:
-            scalar (float): The scalar value to multiply by
-        Returns:
-            QUBO: A new QUBO object with all coefficients multiplied by the scalar
-
-        Example:
-            .. testcode::
-                Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp = QUBO(0, Qdict)
-                qp2 = qp * 2
-                print(qp2.Qdict)
-                # >>> {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
-                print(qp.Qdict)  # Original unchanged
-                # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-        """
-        if not isinstance(scalar, (int, float)):
-            raise TypeError("Can only multiply QUBO by scalar (int or float)")
-
-        new_Qdict = {key: value * scalar for key, value in self.Qdict.items()}
-        new_offset = self.offset * scalar
-        return self.__class__(new_offset, new_Qdict)
-
-    def __rmul__(self, scalar):
-        """
-        Implements right scalar multiplication: 2 * qp
-
-        Args:
-            scalar (float): The scalar value to multiply by
-        Returns:
-            QUBO: A new QUBO object with all coefficients multiplied by the scalar
-        """
-        return self.__mul__(scalar)
-
     def qubo_to_ising(self, constant=0.0):
         """Convert a QUBO problem to an Ising problem.
 
-        Maps a quadratic unconstrained binary optimisation (QUBO) problem defined over
-        binary variables (0 or 1 values), where the linear term is contained along x' Qx
-        the diagonal of Q, to an Ising model defined on spins (variables with {-1, +1} values).
-        Returns `h` and `J` that define the Ising model as well as `constant` representing the
-        offset in energy between the two problem formulations.
+        Maps a quadratic unconstrained binary optimisation (QUBO) problem defined over binary variables
+        (:math:`\\{0, 1\\}`), where the linear term is contained along the diagonal of :math:`Q` (:math:`x' Qx`), to an
+        Ising model defined on spin variables (:math:`\\{-1, +1\\}`). More specifically, returns the the :math:`h` and
+        :math:`J` variables defining the Ising model as well as the constant value representing the offset in energy
+        between the two problem formulations.
 
         .. math::
 
-             x'  Q  x  = constant + s'  J  s + h'  s
+             x'  Q  x  = \\text{constant} + s'  J  s + h'  s
 
         Args:
-            Q (dict[(variable, variable), coefficient]): QUBO coefficients in a dict of form
-                {(u, v): coefficient, ...}, where keys are 2-tuples of variables of the model
-                and values are biases associated with the pair of variables. Tuples (u, v)
-                represent interactions and (v, v) linear biases.
-            constant (float): Constant offset to be applied to the energy. Defaults to 0.
+            constant (float): Constant offset to be applied to the energy. Defaults to :math:`0.0`.
 
         Returns:
-            (dict, dict, float): A 3-tuple containing:
-            h (dict): Linear coefficients of the Ising problem.
-            J (dict): Quadratic coefficients of the Ising problem.
-            constant (float): The new energy offset.
-
-        Example:
-            This example converts a QUBO problem of two variables that have positive
-            biases of value 1 and are positively coupled with an interaction of value 1
-            to an Ising problem, and shows the new energy offset.
+            (dict, dict, float): A 3-tuple containing: ``h``: the linear coefficients of the Ising problem, ``J``:
+            the quadratic coefficients of the Ising problem, and constant: the new energy offset.
         """
         h = {}
         J = {}
@@ -308,18 +263,14 @@ class QUBO:
         return h, J, constant
 
     def construct_symbolic_Hamiltonian_from_QUBO(self):
-        """Constructs a symbolic Hamiltonian from the QUBO problem by converting it
-        to an Ising model.
+        """Constructs a symbolic Hamiltonian from the QUBO problem by converting it to an Ising model.
 
-        The method calls the qubo_to_ising function to convert the QUBO formulation
-        into an Ising Hamiltonian with linear and quadratic terms. Then, it creates
-        a symbolic Hamiltonian using the qibo library.
+        The method calls the qubo_to_ising function to convert the QUBO formulation into an Ising Hamiltonian with
+        linear and quadratic terms, before creating a symbolic Hamiltonian using the main ``qibo`` library.
 
         Returns:
-            ham (`qibo.hamiltonians.hamiltonians.SymbolicHamiltonian`): A symbolic
-                Hamiltonian that corresponds to the QUBO problem.
+            :class:`qibo.hamiltonians.hamiltonians.SymbolicHamiltonian`: Hamiltonian corresponding to the QUBO problem
         """
-        # Correct the call to qubo_to_ising (no need to pass self.Qdict)
         h, J, constant = self.qubo_to_ising()
 
         # Create a symbolic Hamiltonian using qibo symbols
@@ -338,7 +289,7 @@ class QUBO:
             x (list): A list representing the binary vector for which to evaluate the function.
 
         Returns:
-            f_value (float): The evaluated function value.
+            float: Value of the given binary vector.
 
         Example:
             .. testcode::
@@ -352,9 +303,7 @@ class QUBO:
         f_value = self.offset
         for i in range(self.n):
             if x[i]:
-                f_value += (
-                    self.Qdict[(i, i)] if (i, i) in self.Qdict else 0.0
-                )  # manage diagonal term first
+                f_value += self.Qdict.get((i, i), 0.0)  # manage diagonal term first
                 f_value += sum(
                     self.Qdict.get((i, j), 0) + self.Qdict.get((j, i), 0)
                     for j in range(i + 1, self.n)
@@ -369,7 +318,7 @@ class QUBO:
             x (List[int]): A list representing the binary vector for which to evaluate the gradient.
 
         Returns:
-            grad (List): List of float representing the gradient vector.
+            list: List of floats representing the gradient vector.
 
         Example:
             .. testcode::
@@ -396,8 +345,7 @@ class QUBO:
             tabu_size (int): Size of the Tabu list.
 
         Returns:
-            best_solution (list): List of ints representing the best binary vector found.
-            best_obj_value (float): The corresponding objective value.
+            (list, float): A list of integers representing the best binary vector found and its corresponding value
 
         Example:
             .. testcode::
@@ -443,12 +391,10 @@ class QUBO:
         return best_solution, best_obj_value
 
     def brute_force(self):
-        """Solves the QUBO problem by evaluating all possible binary vectors.
-            Note that this approach is very slow.
+        """Solves the QUBO problem by evaluating all possible binary vectors. Note that this approach is very slow.
 
         Returns:
-            opt_vector (list): List of ints representing the optimal binary vector.
-            min_value (float): The minimum value of the objective function.
+            (list, float): A list of integers representing the optimal binary vector and its corresponding value
 
         Example:
             .. testcode::
@@ -461,26 +407,15 @@ class QUBO:
                 print(min_value)
                 # >>> -1.0
         """
-        possible_values = {}
-        # A list of all the possible permutations for x vector
-        vec_permutations = itertools.product([0, 1], repeat=self.n)
-
-        for permutation in vec_permutations:
-            value = self.evaluate_f(permutation)
-            possible_values[value] = permutation
-        min_value = min(
-            possible_values.keys()
-        )  # Lowest value of the objective function
-        opt_vector = tuple(
-            possible_values[min_value]
-        )  # Optimum vector x that produces the lowest value
-        return opt_vector, min_value
+        opt_vector = min(itertools.product([0, 1], repeat=self.n), key=self.evaluate_f)
+        return opt_vector, self.evaluate_f(opt_vector)
 
     def canonical_q(self):
-        """Converts the QUBO matrix to canonical form where only terms with i < j are retained.
+        """Converts the ``Qdict`` attribute (QUBO matrix) to canonical form whereby only terms with ``i < j``
+        are retained.
 
         Returns:
-            self.Qdict (dict): A dictionary and also update Qdict
+            dict: Updated QUBO matrix
         """
         Qdict = {
             (i, j): self.Qdict.get((i, j), 0) + self.Qdict.get((j, i), 0)
@@ -505,7 +440,7 @@ class QUBO:
                 If len(custom_mixer) != 1 and != len(gammas), raise an error.
 
         Returns:
-            circuit (:class:`qibo.models.Circuit`): The QAOA or XQAOA circuit corresponding to the QUBO problem.
+            :class:`qibo.models.Circuit`: The QAOA or XQAOA circuit corresponding to the QUBO problem.
         """
         if alphas is not None:  # Use XQAOA, ignore mixer_function
             circuit = self._build(gammas, betas, alphas)
@@ -770,7 +705,7 @@ class QUBO:
             params (List[float]): Parameters of the QAOA given in block format:
                 e.g. [all_gammas, all_betas, all_alphas] (if alphas is not None)
         Returns:
-            qaoa (`qibo.models.QAOA`): A QAOA circuit for the QUBO problem.
+            `qibo.models.QAOA`: QAOA circuit for the QUBO problem.
         """
 
         # Convert QUBO to Ising Hamiltonian
