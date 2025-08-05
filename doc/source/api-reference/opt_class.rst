@@ -19,14 +19,13 @@ When formulated carefully, QUBO problems can be mapped to solve a host of optimi
     :members:
     :member-order: bysource
 
-
-.. _LP:
-
 Linear Problems
 ^^^^^^^^^^^^^^^
 
 Linear problem write up goes here.
 
-.. autoclass:: qiboopt.opt_class.opt_class.linear_problem
+.. _LP:
+
+.. autoclass:: qiboopt.opt_class.opt_class.LinearProblem
     :members:
     :member-order: bysource

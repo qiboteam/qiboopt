@@ -44,7 +44,6 @@ class QUBO:
             print(qp.Qdict)
             # >>> ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
 
-
     Args:
         offset (float): The constant offset of the QUBO problem.
         args (dict): Input for parameters for QUBO or Ising formulation. If ``len(args) == 1``,
@@ -64,7 +63,6 @@ class QUBO:
                 J (dict): Quadratic biases as a dictionary of the form ``{(u, v): bias, ...}``, where keys are
                     two-tuples of variables of the model and values are biases associated with the interaction between
                     the pair of variables.
-
     """
 
     def __init__(self, offset, *args):
@@ -731,12 +729,9 @@ class QUBO:
 
 
 class LinearProblem:
-    """A class used to represent a linear problem of the form Ax + b.
-
-    Args:
-        A (np.ndarray): Coefficient matrix.
-        b (np.ndarray): Constant vector.
-        n (int): Dimension of the problem, inferred from the size of b.
+    """Initializes a ``LinearProblem`` class, which represents a linear problem of the form :math:`Ax + b`. The
+    ``LinearProblem`` class can be multiplied by a scalar factor, and multiple ``LinearProblem`` instances can be added
+    together.
 
     Example:
         .. testcode::
@@ -744,18 +739,20 @@ class LinearProblem:
             A1 = np.array([[1, 2], [3, 4]])
             b1 = np.array([5, 6])
             lp1 = LinearProblem(A1, b1)
+            lp1 *= 2
             A2 = np.array([[1, 1], [1, 1]])
             b2 = np.array([1, 1])
             lp2 = LinearProblem(A2, b2)
             lp3 = lp1 + lp2
             print(lp3.A)
-            # >>> [[2 3]
-            #      [4 5]]
+            # >>> [[3 5]
+            #      [7 9]]
             print(lp3.b)
-            # >>> [6 7]
-            print(lp1.A)  # Original lp1 unchanged
-            # >>> [[1 2]
-            #      [3 4]]
+            # >>> [11 13]
+
+    Args:
+        A (np.ndarray): Coefficient matrix.
+        b (np.ndarray): Constant vector.
     """
 
     def __init__(self, A, b):
@@ -765,69 +762,26 @@ class LinearProblem:
         self.n = self.A.shape[1]
 
     def __add__(self, other_linear):
-        """
-        Args:
-            other_linear: another LinearProblem class object
-        Returns:
-            LinearProblem: A new LinearProblem object representing the sum of self and other_linear
-        """
-        # Create copies of the matrices and vectors
-        new_A = self.A.copy() + other_linear.A
-        new_b = self.b.copy() + other_linear.b
-
-        # Create and return a new LinearProblem object
+        new_A = self.A + other_linear.A
+        new_b = self.b + other_linear.b
         return self.__class__(new_A, new_b)
 
     def __mul__(self, scalar):
-        """
-        Implements scalar multiplication: lp * 2
-
-        Args:
-            scalar (float): The scalar value to multiply by
-        Returns:
-            LinearProblem: A new LinearProblem object with A and b multiplied by the scalar
-
-        Example:
-            .. testcode::
-                A = np.array([[1, 2], [3, 4]])
-                b = np.array([5, 6])
-                lp = LinearProblem(A, b)
-                lp2 = lp * 2
-                print(lp2.A)
-                # >>> [[2 4]
-                #      [6 8]]
-                print(lp2.b)
-                # >>> [10 12]
-                print(lp.A)  # Original unchanged
-                # >>> [[1 2]
-                #      [3 4]]
-        """
         if not isinstance(scalar, (int, float)):
-            raise TypeError("Can only multiply LinearProblem by scalar (int or float)")
+            raise TypeError("Can only multiply LinearProblem by scalars (int or float)")
 
-        new_A = self.A.copy() * scalar
-        new_b = self.b.copy() * scalar
+        new_A = self.A * scalar
+        new_b = self.b * scalar
         return self.__class__(new_A, new_b)
 
     def __rmul__(self, scalar):
-        """
-        Implements right scalar multiplication: 2 * lp
-
-        Args:
-            scalar (float): The scalar value to multiply by
-        Returns:
-            LinearProblem: A new LinearProblem object with A and b multiplied by the scalar
-        """
         return self.__mul__(scalar)
 
     def evaluate_f(self, x):
-        """Evaluates the linear function Ax + b at a given point x.
+        """Evaluates the linear function :math:`Ax + b` at a given point :math:`x`.
 
         Args:
             x (np.ndarray): Input vector at which to evaluate the linear function.
-
-        Returns:
-            numpy.ndarray: The value of the linear function Ax + b at the given x.
 
         Example:
             .. testcode::
@@ -839,15 +793,14 @@ class LinearProblem:
                 result = lp.evaluate_f(x)
                 print(result)
                 # [ 8 13]
+
+        Returns:
+            numpy.ndarray: The value of the linear function :math:`Ax + b` at :math:`x`.
         """
         return self.A @ x + self.b
 
     def square(self):
         """Squares the linear problem to obtain a quadratic problem.
-
-        Returns:
-            :class:`qiboopt.opt_class.opt_class.QUBO`: A quadratic problem
-            corresponding to squaring the linear function.
 
         Example:
             .. testcode::
@@ -860,6 +813,10 @@ class LinearProblem:
                 # >>> {(0, 0): 56, (0, 1): 14, (1, 0): 14, (1, 1): 88}
                 print(Quadratic.offset)
                 # >>> 61
+
+        Returns:
+            :class:`qiboopt.opt_class.opt_class.QUBO`: Quadratic problem corresponding to squaring the linear function.
+
         """
         quadraticpart = self.A.T @ self.A + np.diag(2 * (self.b @ self.A))
         offset = np.dot(self.b, self.b)
