@@ -1,7 +1,7 @@
 .. _opt_class:
 
-Optimisation class
-------------------
+Optimisation classes
+--------------------
 
 This module contains classes for formulating and solving QUBO and linear problems.
 
