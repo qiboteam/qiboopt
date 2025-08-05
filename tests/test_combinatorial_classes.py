@@ -12,7 +12,7 @@ from qiboopt.combinatorial_classes.combinatorial_classes import (
 )
 from qiboopt.opt_class.opt_class import (
     QUBO,
-    linear_problem,
+    LinearProblem,
 )
 
 
@@ -176,7 +176,7 @@ def test_row_constraints(setup_tsp):
         row_constraint = np.array([0 for _ in range(num_cities**2)])
         for j in range(num_cities):
             row_constraint[two_to_one(v, j)] = 1
-        lp = linear_problem(row_constraint, -1)
+        lp = LinearProblem(row_constraint, -1)
         tmp_qp = lp.square()
         tmp_qp *= penalty
         qp += tmp_qp
@@ -279,7 +279,7 @@ def test_column_constraints(setup_tsp):
         col_constraint = np.array([0 for _ in range(num_cities**2)])
         for v in range(num_cities):
             col_constraint[two_to_one(v, j)] = 1
-        lp = linear_problem(col_constraint, -1)
+        lp = LinearProblem(col_constraint, -1)
         tmp_qp = lp.square()
         tmp_qp *= penalty
         qp += tmp_qp

@@ -69,20 +69,22 @@ class QUBO:
 
     def __init__(self, offset, *args):
         self.offset = offset
-        if len(args) == 1 and isinstance(args[0], dict):
+        # Check that all of *args are dictionaries
+        if not all(isinstance(arg, dict) for arg in args):
+            raise_error(
+                TypeError, "args in a QUBO constructor can only be dictionaries."
+            )
+        if len(args) == 1:
             self.Qdict = args[0]
-            if self.Qdict:
-                self.n = max(max(key) for key in self.Qdict) + 1
-            else:
-                self.n = 0
             self.h, self.J, self.ising_constant = self.qubo_to_ising()
-        elif len(args) == 2 and isinstance(args[0], dict) and isinstance(args[1], dict):
+        elif len(args) == 2:
             h = args[0]
             J = args[1]
             self.h = h
             self.J = J
+
+            # ZC NOTE: Is this correct?
             self.Qdict = {(v, v): 2.0 * bias for v, bias in h.items()}
-            self.n = 0
 
             # next the opt_class biases
             for (u, v), bias in self.Qdict.items():
@@ -90,12 +92,15 @@ class QUBO:
                     self.Qdict[(u, v)] = 4.0 * bias
                     self.Qdict[(u, u)] = self.Qdict.get((u, u), 0) - 2.0 * bias
                     self.Qdict[(v, v)] = self.Qdict.get((v, v), 0) - 2.0 * bias
-                    self.n = max([self.n, u, v])
-            self.n += 1
+
             # finally adjust the offset based on QUBO definitions rather than Ising formulation
             self.offset += sum(J.values()) - sum(h.values())
         else:
-            raise_error(TypeError, "Invalid input for QUBO.")
+            raise_error(
+                NotImplementedError, "Invalid number of args in the QUBO constructor."
+            )
+
+        self.n = max(max(key) for key in self.Qdict) + 1 if self.Qdict else 0
 
         # Define other class attributes
         self.n_layers = None
@@ -725,7 +730,7 @@ class QUBO:
         return qaoa
 
 
-class linear_problem:
+class LinearProblem:
     """A class used to represent a linear problem of the form Ax + b.
 
     Args:
@@ -738,10 +743,10 @@ class linear_problem:
 
             A1 = np.array([[1, 2], [3, 4]])
             b1 = np.array([5, 6])
-            lp1 = linear_problem(A1, b1)
+            lp1 = LinearProblem(A1, b1)
             A2 = np.array([[1, 1], [1, 1]])
             b2 = np.array([1, 1])
-            lp2 = linear_problem(A2, b2)
+            lp2 = LinearProblem(A2, b2)
             lp3 = lp1 + lp2
             print(lp3.A)
             # >>> [[2 3]
@@ -762,15 +767,15 @@ class linear_problem:
     def __add__(self, other_linear):
         """
         Args:
-            other_linear: another linear_problem class object
+            other_linear: another LinearProblem class object
         Returns:
-            linear_problem: A new linear_problem object representing the sum of self and other_linear
+            LinearProblem: A new LinearProblem object representing the sum of self and other_linear
         """
         # Create copies of the matrices and vectors
         new_A = self.A.copy() + other_linear.A
         new_b = self.b.copy() + other_linear.b
 
-        # Create and return a new linear_problem object
+        # Create and return a new LinearProblem object
         return self.__class__(new_A, new_b)
 
     def __mul__(self, scalar):
@@ -780,13 +785,13 @@ class linear_problem:
         Args:
             scalar (float): The scalar value to multiply by
         Returns:
-            linear_problem: A new linear_problem object with A and b multiplied by the scalar
+            LinearProblem: A new LinearProblem object with A and b multiplied by the scalar
 
         Example:
             .. testcode::
                 A = np.array([[1, 2], [3, 4]])
                 b = np.array([5, 6])
-                lp = linear_problem(A, b)
+                lp = LinearProblem(A, b)
                 lp2 = lp * 2
                 print(lp2.A)
                 # >>> [[2 4]
@@ -798,7 +803,7 @@ class linear_problem:
                 #      [3 4]]
         """
         if not isinstance(scalar, (int, float)):
-            raise TypeError("Can only multiply linear_problem by scalar (int or float)")
+            raise TypeError("Can only multiply LinearProblem by scalar (int or float)")
 
         new_A = self.A.copy() * scalar
         new_b = self.b.copy() * scalar
@@ -811,7 +816,7 @@ class linear_problem:
         Args:
             scalar (float): The scalar value to multiply by
         Returns:
-            linear_problem: A new linear_problem object with A and b multiplied by the scalar
+            LinearProblem: A new LinearProblem object with A and b multiplied by the scalar
         """
         return self.__mul__(scalar)
 
@@ -829,7 +834,7 @@ class linear_problem:
 
                 A = np.array([[1, 2], [3, 4]])
                 b = np.array([5, 6])
-                lp = linear_problem(A, b)
+                lp = LinearProblem(A, b)
                 x = np.array([1, 1])
                 result = lp.evaluate_f(x)
                 print(result)
@@ -849,7 +854,7 @@ class linear_problem:
 
                 A = np.array([[1, 2], [3, 4]])
                 b = np.array([5, 6])
-                lp = linear_problem(A, b)
+                lp = LinearProblem(A, b)
                 Quadratic = lp.square()
                 print(Quadratic.Qdict)
                 # >>> {(0, 0): 56, (0, 1): 14, (1, 0): 14, (1, 1): 88}

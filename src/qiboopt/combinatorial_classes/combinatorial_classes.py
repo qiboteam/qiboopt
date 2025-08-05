@@ -11,7 +11,7 @@ from qibo.symbols import X, Y, Z
 
 from qiboopt.opt_class.opt_class import (
     QUBO,
-    linear_problem,
+    LinearProblem,
 )
 
 
@@ -273,7 +273,7 @@ class TSP:
             row_constraint = [0 for _ in range(self.num_cities**2)]
             for j in range(self.num_cities):
                 row_constraint[self.two_to_one[v, j]] = 1
-            lp = linear_problem(row_constraint, -1)
+            lp = LinearProblem(row_constraint, -1)
             tmp_qp = lp.square()
             tmp_qp = tmp_qp * penalty
             qp = qp + tmp_qp
@@ -283,7 +283,7 @@ class TSP:
             col_constraint = [0 for _ in range(self.num_cities**2)]
             for v in range(self.num_cities):
                 col_constraint[self.two_to_one[v, j]] = 1
-            lp = linear_problem(col_constraint, -1)
+            lp = LinearProblem(col_constraint, -1)
             tmp_qp = lp.square()
             tmp_qp = tmp_qp * penalty
             qp = qp + tmp_qp

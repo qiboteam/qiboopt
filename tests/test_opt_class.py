@@ -8,7 +8,7 @@ from qibo.quantum_info import infidelity
 
 from qiboopt.opt_class.opt_class import (
     QUBO,
-    linear_problem,
+    LinearProblem,
 )
 
 
@@ -646,7 +646,7 @@ def test_qubo_to_qaoa_object_params():
 def test_linear_initialization():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
-    lp = linear_problem(A, b)
+    lp = LinearProblem(A, b)
     assert np.array_equal(lp.A, A)
     assert np.array_equal(lp.b, b)
     assert lp.n == 2
@@ -655,17 +655,17 @@ def test_linear_initialization():
 def test_linear_multiply_scalar():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
-    lp = linear_problem(A, b)
+    lp = LinearProblem(A, b)
     lp *= 2
     assert np.array_equal(lp.A, np.array([[2, 4], [6, 8]]))
     assert np.array_equal(lp.b, np.array([10, 12]))
 
 
 def test_linear_multiplication_operators():
-    """Test the new multiplication operators for linear_problem"""
+    """Test the new multiplication operators for LinearProblem"""
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
-    lp = linear_problem(A, b)
+    lp = LinearProblem(A, b)
 
     # Test lp * 2
     lp2 = lp * 2
@@ -694,10 +694,10 @@ def test_linear_multiplication_operators():
 def test_linear_addition():
     A1 = np.array([[1, 2], [3, 4]])
     b1 = np.array([5, 6])
-    lp1 = linear_problem(A1, b1)
+    lp1 = LinearProblem(A1, b1)
     A2 = np.array([[1, 1], [1, 1]])
     b2 = np.array([1, 1])
-    lp2 = linear_problem(A2, b2)
+    lp2 = LinearProblem(A2, b2)
     lp3 = lp1 + lp2
     assert np.array_equal(lp3.A, np.array([[2, 3], [4, 5]]))
     assert np.array_equal(lp3.b, np.array([6, 7]))
@@ -711,7 +711,7 @@ def test_linear_addition():
 def test_linear_evaluate_f():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
-    lp = linear_problem(A, b)
+    lp = LinearProblem(A, b)
     x = np.array([1, 1])
     result = lp.evaluate_f(x)
     assert np.array_equal(result, np.array([8, 13]))
@@ -720,7 +720,7 @@ def test_linear_evaluate_f():
 def test_linear_square():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
-    lp = linear_problem(A, b)
+    lp = LinearProblem(A, b)
     Quadratic = lp.square()
     Qdict = Quadratic.Qdict
     offset = Quadratic.offset
