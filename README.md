@@ -23,14 +23,14 @@ The qiboopt package can be installed through pip:
 ## Quickstart
 
 Once installed, `qiboopt` allows the general user to solve QUBO problems with the built-in `QUBO` class.
-Along with the `QUBO` class, there are some combinatorial classes found in `qiboopt.combinatorial_classes`.
+Along with the `QUBO` class, there are some combinatorial classes found in `qiboopt.combinatorial`.
 
 Formuating a QUBO problem:
 
 - Maximal Independent Set:
 ```python
 	import networkx as nx
-	from qiboopt.combinatorial_classes.combinatorial_classes import Mis
+	from qiboopt.combinatorial.combinatorial import Mis
 
 	g = nx.Graph()
 	g.add_edges_from([(0, 1), (1, 2), (2, 0)])

@@ -110,19 +110,6 @@ def _tsp_mixer(num_cities, backend=None):
         for v in range(num_cities)
         if u != v
     )
-    # for i in range(num_cities):
-    #     for u in range(num_cities):
-    #         for v in range(num_cities):
-    #             if u != v:
-    #                 form += splus(u, i) * splus(v, (i + 1) % num_cities) * sminus(
-    #                     u, (i + 1) % num_cities
-    #                 ) * sminus(v, i) + sminus(u, i) * sminus(
-    #                     v, (i + 1) % num_cities
-    #                 ) * splus(
-    #                     u, (i + 1) % num_cities
-    #                 ) * splus(
-    #                     v, i
-    #                 )
     ham = SymbolicHamiltonian(form, backend=backend)
     return ham
 

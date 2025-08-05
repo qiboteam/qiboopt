@@ -3,7 +3,7 @@ import numpy as np
 import pytest
 from qibo.hamiltonians import SymbolicHamiltonian
 
-from qiboopt.combinatorial_classes.combinatorial_classes import (
+from qiboopt.combinatorial.combinatorial import (
     TSP,
     Mis,
     _calculate_two_to_one,

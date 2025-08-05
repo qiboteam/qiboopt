@@ -1,4 +1,4 @@
-.. _combinatorial_classes:
+.. _combinatorial:
 
 Combinatorial classes
 ---------------------
@@ -18,7 +18,7 @@ The idea behind TSP can be mapped to similar-type problems. For instance, what i
 
 In this module, the TSP class follows `Hadfield's 2017 paper <https://arxiv.org/abs/1709.03489>`_.
 
-.. autoclass:: qiboopt.combinatorial_classes.combinatorial_classes.TSP
+.. autoclass:: qiboopt.combinatorial.combinatorial.TSP
     :members:
     :member-order: bysource
 
@@ -29,6 +29,6 @@ Maximum Independent Set
 
 The MIS problem involves selecting the largest subset of non-adjacent vertices in a graph.
 
-.. autoclass:: qiboopt.combinatorial_classes.combinatorial_classes.Mis
+.. autoclass:: qiboopt.combinatorial.combinatorial.Mis
     :members:
     :member-order: bysource
