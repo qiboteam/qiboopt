@@ -29,6 +29,6 @@ Maximum Independent Set
 
 The MIS problem involves selecting the largest subset of non-adjacent vertices in a graph.
 
-.. autoclass:: qiboopt.combinatorial.combinatorial.Mis
+.. autoclass:: qiboopt.combinatorial.combinatorial.MIS
     :members:
     :member-order: bysource

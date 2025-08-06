@@ -11,11 +11,11 @@ Formuating a QUBO problem:
 .. code-block:: python
 
    import networkx as nx
-   from qiboopt.combinatorial.combinatorial import Mis
+   from qiboopt.combinatorial.combinatorial import MIS
 
    g = nx.Graph()
    g.add_edges_from([(0, 1), (1, 2), (2, 0)])
-   mis = Mis(g)
+   mis = MIS(g)
    penalty = 10
    qp = mis.penalty_method(penalty)
 

@@ -4,8 +4,8 @@ import pytest
 from qibo.hamiltonians import SymbolicHamiltonian
 
 from qiboopt.combinatorial.combinatorial import (
+    MIS,
     TSP,
-    Mis,
     _calculate_two_to_one,
     _tsp_mixer,
     _tsp_phaser,
@@ -468,13 +468,13 @@ def test_tsp_penalty():
 def test_mis_class():
     g = nx.Graph()
     g.add_edges_from([(0, 1), (1, 2), (2, 0)])
-    mis = Mis(g)
-    assert mis.n == 3, "Mis class did not set the number of nodes correctly"
-    assert mis.g == g, "Mis class did not set the graph correctly"
+    mis = MIS(g)
+    assert mis.n == 3, "MIS class did not set the number of nodes correctly"
+    assert mis.g == g, "MIS class did not set the graph correctly"
 
     penalty = 10
     qp = mis.penalty_method(penalty)
-    assert isinstance(qp, QUBO), "Mis.penalty_method did not return a QUBO"
+    assert isinstance(qp, QUBO), "MIS.penalty_method did not return a QUBO"
 
     mis_str = str(mis)
-    assert mis_str == "Mis", "Mis.__str__ did not return the expected string"
+    assert mis_str == "MIS", "MIS.__str__ did not return the expected string"

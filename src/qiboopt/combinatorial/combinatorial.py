@@ -277,7 +277,7 @@ class TSP:
         return qp
 
 
-class Mis:
+class MIS:
     """
     Class for representing the Maximal Independent Set (MIS) problem.
 
@@ -290,7 +290,7 @@ class Mis:
         .. testcode::
 
             import networkx as nx
-            from qiboopt.combinatorial_classes.combinatorial_classes import Mis
+            from qiboopt.combinatorial.combinatorial import MIS
 
             g = nx.Graph()
             g.add_edges_from([(0, 1), (1, 2), (2, 0)])
