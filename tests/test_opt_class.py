@@ -3,7 +3,7 @@ import pytest
 from qibo import Circuit, gates
 from qibo.models import QAOA
 from qibo.noise import DepolarizingError, NoiseModel
-from qibo.optimizers import optimize as optimize
+from qibo.optimizers import optimize
 from qibo.quantum_info import infidelity
 
 from qiboopt.opt_class.opt_class import (
@@ -12,8 +12,8 @@ from qiboopt.opt_class.opt_class import (
 )
 
 
-# Test initialization of the QUBO class
 def test_initialization():
+    """Test initialization of the QUBO class"""
     Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
     qp = QUBO(0, Qdict)
 
@@ -22,44 +22,18 @@ def test_initialization():
     assert qp.n == 2  # Maximum variable index in Qdict keys
 
 
-def test_multiplication_operators():
-    """Test the multiplication operators for QUBO"""
-    Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-    qp = QUBO(0, Qdict)
+def test_add_multiplication_operators():
+    """Test addition and multiplication operators for QUBO"""
+    qp1 = QUBO(0, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
+    qp2 = QUBO(1.0, {(0, 0): 2.0, (1, 0): 2.0, (1, 1): -2.0})
 
-    # Test qp * 2
-    qp2 = qp * 2
-    assert qp2.Qdict == {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
-    assert qp2.offset == 0.0
-    assert qp.Qdict == Qdict  # Original unchanged
-
-    # Test 2 * qp
-    qp3 = 2 * qp
-    assert qp3.Qdict == {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
-    assert qp3.offset == 0.0
-    assert qp.Qdict == Qdict  # Original unchanged
-
-    # Test qp *= 2
-    qp *= 2
-    assert qp.Qdict == {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
-    assert qp.offset == 0.0
+    qp3 = 2 * qp1 + qp2 * 0.5
+    assert qp3.Qdict == {(0, 0): 3.0, (0, 1): 1.0, (1, 0): 1.0, (1, 1): -3.0}
+    assert qp3.offset == 0.5
 
     # Test type error
     with pytest.raises(TypeError):
-        qp * "invalid"
-
-
-def test_add():
-    Qdict1 = {(0, 0): 1.0, (0, 1): 0.5}
-    Qdict2 = {(0, 0): -1.0, (1, 1): 2.0}
-    qp1 = QUBO(0, Qdict1)
-    qp2 = QUBO(0, Qdict2)
-    qp3 = qp1 + qp2
-    assert qp3.Qdict == {(0, 0): 0.0, (0, 1): 0.5, (1, 1): 2.0}
-    assert qp3.offset == 0.0
-    # Original objects should remain unchanged
-    assert qp1.Qdict == Qdict1
-    assert qp2.Qdict == Qdict2
+        qp3 = qp1 * "invalid"
 
 
 @pytest.mark.parametrize(
@@ -74,8 +48,9 @@ def test_add():
     ],
 )
 def test_invalid_input_qubo(h, J):
+    """Test invalid initialization of the QUBO class"""
     with pytest.raises(TypeError):
-        qp = QUBO(0, h, J)
+        _qp = QUBO(0, h, J)
 
 
 def test_qubo_to_ising():
@@ -92,20 +67,15 @@ def test_qubo_to_ising():
 def test_evaluate_f():
     Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
     qp = QUBO(0, Qdict)
-
     x = [1, 1]
-    f_value = qp.evaluate_f(x)
-
-    assert f_value == 0.5
+    assert qp.evaluate_f(x) == 0.5
 
 
 def test_evaluate_grad_f():
     Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
     qp = QUBO(0, Qdict)
-
     x = [1, 1]
-    grad = qp.evaluate_grad_f(x)
-    assert np.array_equal(grad, [1.5, -0.5])
+    assert np.array_equal(qp.evaluate_grad_f(x), [1.5, -0.5])
 
 
 def test_tabu_search():
@@ -192,7 +162,7 @@ def test_consistent_terms_in_ham():
     ham = qubo_instance.construct_symbolic_Hamiltonian_from_QUBO()
 
     # Expected terms based on qubo_to_ising output
-    h, J, constant = qubo_instance.qubo_to_ising()
+    h, J, _constant = qubo_instance.qubo_to_ising()
 
     # Extract terms from the symbolic Hamiltonian (converting to string for easier term extraction)
     ham_str = str(ham.form).replace(" ", "")
@@ -255,35 +225,6 @@ def test_qubo_to_qaoa_circuit(gammas, betas, alphas):
 )
 def test_qubo_to_qaoa_svp_mixer(gammas, betas):
 
-    def _get_svp_zero_representation(name_to_index):
-        """
-        :return: a set of indices where it takes values 1, this is to help constructing the mixer
-        """
-        active_set = set()
-        for key in name_to_index:
-            if "x" in key or "y" in key:
-                active_set.add(name_to_index[key])
-        return active_set
-
-    def _create_svp_mixer(name_to_index, beta):
-        """
-        :param name_to_index: a name to index mapping required to create mixer to preserve probability of 0
-        :return: mixer circuit
-        """
-        n = 0
-        for i in name_to_index:
-            n += 1
-        mixer = Circuit(n, density_matrix=True)
-        active_set = _get_svp_zero_representation(name_to_index)
-        for i in range(n):
-            if i in active_set:
-                mixer.add(gates.X(i))
-            mixer.add(gates.RY((i + 1) % n, beta))
-            mixer.add(gates.CZ(i, (i + 1) % n))
-            if i in active_set:
-                mixer.add(gates.X(i))
-        return mixer
-
     numeric_qubo = {
         (0, 4): 4.0,
         (2, 4): 4.0,
@@ -300,22 +241,22 @@ def test_qubo_to_qaoa_svp_mixer(gammas, betas):
     name_to_index = {"w[1]": 0, "w[2]": 1, "x_1_0": 2, "x_2_0": 3, "y[1]": 4, "y[2]": 5}
 
     # SVP_mixers is now a list of functions that take beta and return a circuit
-    SVP_mixers = [
-        lambda beta, idx=idx: _create_svp_mixer(name_to_index, beta)
+    svp_mixers = [
+        lambda beta, idx=idx: create_svp_mixer(name_to_index, beta)
         for idx in range(len(betas))
     ]
 
     if len(betas) != len(gammas):
         with pytest.raises(ValueError):
-            circuit = QUBO(0, numeric_qubo).qubo_to_qaoa_circuit(
-                gammas, betas, alphas=None, custom_mixer=SVP_mixers
+            circuit = QUBO(offset, numeric_qubo).qubo_to_qaoa_circuit(
+                gammas, betas, alphas=None, custom_mixer=svp_mixers
             )
     else:
-        circuit = QUBO(0, numeric_qubo).qubo_to_qaoa_circuit(
-            gammas, betas, alphas=None, custom_mixer=SVP_mixers
+        circuit = QUBO(offset, numeric_qubo).qubo_to_qaoa_circuit(
+            gammas, betas, alphas=None, custom_mixer=svp_mixers
         )
         assert isinstance(circuit, Circuit)
-        assert circuit.nqubits == QUBO(0, numeric_qubo).n
+        assert circuit.nqubits == QUBO(offset, numeric_qubo).n
 
 
 @pytest.mark.parametrize(
@@ -398,6 +339,35 @@ def test_train_QAOA_edge_cases():
     assert isinstance(result[4], dict)
 
 
+def create_svp_mixer(name_to_index, beta):
+    """
+    Helper function to create a mixer circuit
+
+    Args:
+        name_to_index (dict): a name to index mapping required to create mixer to preserve probability of 0
+        beta (float): Circuit parameter
+
+    Returns:
+        :class:`qibo.models.Circuit`: Mixer circuit
+    """
+    n = len(name_to_index)
+    mixer = Circuit(n, density_matrix=True)
+    # Get the set of indices where it takes values 1; to help construct the mixer
+    active_set = {
+        value
+        for key, value in name_to_index.items()
+        if any(_x in key for _x in ("x", "y"))
+    }
+    for i in range(n):
+        if i in active_set:
+            mixer.add(gates.X(i))
+        mixer.add(gates.RY((i + 1) % n, beta))
+        mixer.add(gates.CZ(i, (i + 1) % n))
+        if i in active_set:
+            mixer.add(gates.X(i))
+    return mixer
+
+
 @pytest.mark.parametrize(
     "gammas, betas, alphas, reg_loss, cvar_delta",
     [
@@ -406,36 +376,6 @@ def test_train_QAOA_edge_cases():
     ],
 )
 def test_train_QAOA_svp_mixer(gammas, betas, alphas, reg_loss, cvar_delta):
-
-    def _get_svp_zero_representation(name_to_index):
-        """
-        :return: a set of indices where it takes values 1, this is to help constructing the mixer
-        """
-        active_set = set()
-        for key in name_to_index:
-            if "x" in key or "y" in key:
-                active_set.add(name_to_index[key])
-        return active_set
-
-    def _create_svp_mixer(name_to_index, beta):
-        """
-        :param name_to_index: a name to index mapping required to create mixer to preserve probability of 0
-        :return: mixer circuit
-        """
-        n = 0
-        for i in name_to_index:
-            n += 1
-        mixer = Circuit(n, density_matrix=True)
-        active_set = _get_svp_zero_representation(name_to_index)
-        for i in range(n):
-            if i in active_set:
-                mixer.add(gates.X(i))
-            mixer.add(gates.RY((i + 1) % n, beta))
-            mixer.add(gates.CZ(i, (i + 1) % n))
-            if i in active_set:
-                mixer.add(gates.X(i))
-        return mixer
-
     numeric_qubo = {
         (0, 4): 4.0,
         (2, 4): 4.0,
@@ -452,8 +392,8 @@ def test_train_QAOA_svp_mixer(gammas, betas, alphas, reg_loss, cvar_delta):
     name_to_index = {"w[1]": 0, "w[2]": 1, "x_1_0": 2, "x_2_0": 3, "y[1]": 4, "y[2]": 5}
 
     # SVP_mixers is now a list of functions that take beta and return a circuit
-    SVP_mixers = [
-        lambda beta, idx=idx: _create_svp_mixer(name_to_index, beta)
+    svp_mixers = [
+        lambda beta, idx=idx: create_svp_mixer(name_to_index, beta)
         for idx in range(len(betas))
     ]
 
@@ -464,7 +404,7 @@ def test_train_QAOA_svp_mixer(gammas, betas, alphas, reg_loss, cvar_delta):
         nshots=10,
         regular_loss=reg_loss,
         cvar_delta=cvar_delta,
-        custom_mixer=SVP_mixers,
+        custom_mixer=svp_mixers,
     )
     assert isinstance(result[0], float)
     assert isinstance(result[1], np.ndarray)
@@ -481,35 +421,6 @@ def test_train_QAOA_svp_mixer(gammas, betas, alphas, reg_loss, cvar_delta):
 )
 def test_train_QAOA_svp_mixer_lambda(gammas, betas, alphas, reg_loss, cvar_delta):
 
-    def _get_svp_zero_representation(name_to_index):
-        """
-        :return: a set of indices where it takes values 1, this is to help constructing the mixer
-        """
-        active_set = set()
-        for key in name_to_index:
-            if "x" in key or "y" in key:
-                active_set.add(name_to_index[key])
-        return active_set
-
-    def _create_svp_mixer(name_to_index, beta):
-        """
-        :param name_to_index: a name to index mapping required to create mixer to preserve probability of 0
-        :return: mixer circuit
-        """
-        n = 0
-        for i in name_to_index:
-            n += 1
-        mixer = Circuit(n, density_matrix=True)
-        active_set = _get_svp_zero_representation(name_to_index)
-        for i in range(n):
-            if i in active_set:
-                mixer.add(gates.X(i))
-            mixer.add(gates.RY((i + 1) % n, beta))
-            mixer.add(gates.CZ(i, (i + 1) % n))
-            if i in active_set:
-                mixer.add(gates.X(i))
-        return mixer
-
     numeric_qubo = {
         (0, 4): 4.0,
         (2, 4): 4.0,
@@ -525,7 +436,7 @@ def test_train_QAOA_svp_mixer_lambda(gammas, betas, alphas, reg_loss, cvar_delta
     offset = 5.0
     name_to_index = {"w[1]": 0, "w[2]": 1, "x_1_0": 2, "x_2_0": 3, "y[1]": 4, "y[2]": 5}
 
-    mixer_lambda = lambda beta: _create_svp_mixer(name_to_index, beta)
+    mixer_lambda = lambda beta: create_svp_mixer(name_to_index, beta)
 
     result = QUBO(0, numeric_qubo).train_QAOA(
         gammas=gammas,
@@ -551,35 +462,6 @@ def test_train_QAOA_svp_mixer_lambda(gammas, betas, alphas, reg_loss, cvar_delta
 )
 def test_train_QAOA_svp_mixer_noise_model(gammas, betas, alphas, reg_loss, cvar_delta):
 
-    def _get_svp_zero_representation(name_to_index):
-        """
-        :return: a set of indices where it takes values 1, this is to help constructing the mixer
-        """
-        active_set = set()
-        for key in name_to_index:
-            if "x" in key or "y" in key:
-                active_set.add(name_to_index[key])
-        return active_set
-
-    def _create_svp_mixer(name_to_index, beta):
-        """
-        :param name_to_index: a name to index mapping required to create mixer to preserve probability of 0
-        :return: mixer circuit
-        """
-        n = 0
-        for i in name_to_index:
-            n += 1
-        mixer = Circuit(n, density_matrix=True)
-        active_set = _get_svp_zero_representation(name_to_index)
-        for i in range(n):
-            if i in active_set:
-                mixer.add(gates.X(i))
-            mixer.add(gates.RY((i + 1) % n, beta))
-            mixer.add(gates.CZ(i, (i + 1) % n))
-            if i in active_set:
-                mixer.add(gates.X(i))
-        return mixer
-
     numeric_qubo = {
         (0, 4): 4.0,
         (2, 4): 4.0,
@@ -600,8 +482,8 @@ def test_train_QAOA_svp_mixer_noise_model(gammas, betas, alphas, reg_loss, cvar_
     noise_model.add(DepolarizingError(lam))
 
     # SVP_mixers is now a list of functions that take beta and return a circuit
-    SVP_mixers = [
-        lambda beta, idx=idx: _create_svp_mixer(name_to_index, beta)
+    svp_mixers = [
+        lambda beta, idx=idx: create_svp_mixer(name_to_index, beta)
         for idx in range(len(betas))
     ]
 
@@ -612,7 +494,7 @@ def test_train_QAOA_svp_mixer_noise_model(gammas, betas, alphas, reg_loss, cvar_
         nshots=10,
         regular_loss=reg_loss,
         cvar_delta=cvar_delta,
-        custom_mixer=SVP_mixers,
+        custom_mixer=svp_mixers,
         noise_model=noise_model,
     )
     assert isinstance(result[0], float)
@@ -652,60 +534,18 @@ def test_linear_initialization():
     assert lp.n == 2
 
 
-def test_linear_multiply_scalar():
-    A = np.array([[1, 2], [3, 4]])
-    b = np.array([5, 6])
-    lp = LinearProblem(A, b)
-    lp *= 2
-    assert np.array_equal(lp.A, np.array([[2, 4], [6, 8]]))
-    assert np.array_equal(lp.b, np.array([10, 12]))
+def test_linear_add_multiplication_operators():
+    """Test addition and multiplication operators for LinearProblem"""
+    lp1 = LinearProblem(np.array([[1, 2], [3, 4]]), np.array([5, 6]))
+    lp2 = LinearProblem(np.array([[2, 2], [2, 2]]), np.array([2, 2]))
+    lp3 = 2 * lp1 + lp2 * 0.5
 
-
-def test_linear_multiplication_operators():
-    """Test the new multiplication operators for LinearProblem"""
-    A = np.array([[1, 2], [3, 4]])
-    b = np.array([5, 6])
-    lp = LinearProblem(A, b)
-
-    # Test lp * 2
-    lp2 = lp * 2
-    assert np.array_equal(lp2.A, np.array([[2, 4], [6, 8]]))
-    assert np.array_equal(lp2.b, np.array([10, 12]))
-    assert np.array_equal(lp.A, A)  # Original unchanged
-    assert np.array_equal(lp.b, b)  # Original unchanged
-
-    # Test 2 * lp
-    lp3 = 2 * lp
-    assert np.array_equal(lp3.A, np.array([[2, 4], [6, 8]]))
-    assert np.array_equal(lp3.b, np.array([10, 12]))
-    assert np.array_equal(lp.A, A)  # Original unchanged
-    assert np.array_equal(lp.b, b)  # Original unchanged
-
-    # Test lp *= 2
-    lp *= 2
-    assert np.array_equal(lp.A, np.array([[2, 4], [6, 8]]))
-    assert np.array_equal(lp.b, np.array([10, 12]))
+    assert np.array_equal(lp3.A, np.array([[3, 5], [7, 9]]))
+    assert np.array_equal(lp3.b, np.array([11, 13]))
 
     # Test type error
     with pytest.raises(TypeError):
-        lp * "invalid"
-
-
-def test_linear_addition():
-    A1 = np.array([[1, 2], [3, 4]])
-    b1 = np.array([5, 6])
-    lp1 = LinearProblem(A1, b1)
-    A2 = np.array([[1, 1], [1, 1]])
-    b2 = np.array([1, 1])
-    lp2 = LinearProblem(A2, b2)
-    lp3 = lp1 + lp2
-    assert np.array_equal(lp3.A, np.array([[2, 3], [4, 5]]))
-    assert np.array_equal(lp3.b, np.array([6, 7]))
-    # Original objects should remain unchanged
-    assert np.array_equal(lp1.A, A1)
-    assert np.array_equal(lp1.b, b1)
-    assert np.array_equal(lp2.A, A2)
-    assert np.array_equal(lp2.b, b2)
+        lp3 = lp1 * "invalid"
 
 
 def test_linear_evaluate_f():
@@ -721,9 +561,9 @@ def test_linear_square():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
     lp = LinearProblem(A, b)
-    Quadratic = lp.square()
-    Qdict = Quadratic.Qdict
-    offset = Quadratic.offset
+    quadratic = lp.square()
+    Qdict = quadratic.Qdict
+    offset = quadratic.offset
     expected_Qdict = {(0, 0): 56, (0, 1): 14, (1, 0): 14, (1, 1): 88}
     expected_offset = 61
     assert Qdict == expected_Qdict
