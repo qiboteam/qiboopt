@@ -80,19 +80,18 @@ class QUBO:
             J = args[1]
             self.h = h
             self.J = J
-
-            # ZC NOTE: Is this correct?
-            self.Qdict = {(v, v): 2.0 * bias for v, bias in h.items()}
+            self.Qdict = {(v, v): -2.0 * bias for v, bias in h.items()}
+            self.n = 0
 
             # next the opt_class biases
-            for (u, v), bias in self.Qdict.items():
+            for (u, v), bias in self.J.items():
                 if bias:
                     self.Qdict[(u, v)] = 4.0 * bias
                     self.Qdict[(u, u)] = self.Qdict.get((u, u), 0) - 2.0 * bias
                     self.Qdict[(v, v)] = self.Qdict.get((v, v), 0) - 2.0 * bias
 
             # finally adjust the offset based on QUBO definitions rather than Ising formulation
-            self.offset += sum(J.values()) - sum(h.values())
+            self.offset += sum(J.values()) + sum(h.values())
         else:
             raise_error(
                 NotImplementedError, "Invalid number of args in the QUBO constructor."
