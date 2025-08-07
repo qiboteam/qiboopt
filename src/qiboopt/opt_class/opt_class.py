@@ -604,7 +604,7 @@ class QUBO:
                 Returns:
                     cvar (float): The computed CVaR value.
                 """
-                m = len(parameters)
+                # m = len(parameters)
                 if alphas is not None:
                     gammas_ = parameters[:p]
                     betas_ = parameters[p : 2 * p]
@@ -653,9 +653,8 @@ class QUBO:
                         selected_energies.append((energy, excess_prob))
                         cumulative_prob = cvar_delta
                         break
-                    else:  # pragma: no cover
-                        selected_energies.append((energy, prob))
-                        cumulative_prob += prob
+                    selected_energies.append((energy, prob))
+                    cumulative_prob += prob
 
                 # Compute CVaR as weighted average of selected energies
                 cvar = (
@@ -697,8 +696,7 @@ class QUBO:
                 result.frequencies(binary=True),
                 original_circuit,
             )
-        else:
-            return best, params, extra, circuit, result.frequencies(binary=True)
+        return best, params, extra, circuit, result.frequencies(binary=True)
 
     def qubo_to_qaoa_object(self, params: list = None):
         """
@@ -716,7 +714,7 @@ class QUBO:
 
         # Create the Ising Hamiltonian using Qibo
         symbolic_ham = sum(h[i] * Z(i) for i in h)
-        symbolic_ham += sum(J[(u, v)] * Z(u) * Z(v) for (u, v) in J)
+        symbolic_ham += sum(value * Z(u) * Z(v) for (u, v), value in J.items())
 
         # Define the QAOA model
         hamiltonian = SymbolicHamiltonian(symbolic_ham)
