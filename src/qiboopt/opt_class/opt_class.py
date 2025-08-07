@@ -78,6 +78,8 @@ class QUBO:
         elif len(args) == 2:
             h = args[0]
             J = args[1]
+            if not all(isinstance(k, int) for k in h.keys()):
+                raise TypeError("All keys in the dictionary must be integers.")
             self.h = h
             self.J = J
             self.Qdict = {(v, v): -2.0 * bias for v, bias in h.items()}
