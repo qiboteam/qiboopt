@@ -120,6 +120,7 @@ class TSP:
 
     Args:
         distance_matrix: a numpy matrix encoding the distance matrix.
+        two_to_one: Mapping from two coordinates to one coordinate
         backend: Backend to use for calculations. If not given the global backend will be used.
 
     Example:
@@ -197,12 +198,14 @@ class TSP:
         Optimization Algorithm to a Quantum Alternating Operator Ansatz*. (`arxiv:1709.03489 <https://arxiv.org/abs/1709.03489>`__)
     """
 
-    def __init__(self, distance_matrix, backend=None):
+    def __init__(self, distance_matrix, two_to_one=None, backend=None):
         self.backend = _check_backend(backend)
 
         self.distance_matrix = distance_matrix
         self.num_cities = distance_matrix.shape[0]
-        self.two_to_one = _calculate_two_to_one(self.num_cities)
+        self.two_to_one = (
+            _calculate_two_to_one(self.num_cities) if two_to_one is None else two_to_one
+        )
 
     def hamiltonians(self):
         """
@@ -245,9 +248,9 @@ class TSP:
         """
         q_dict = {
             (
-                self.two_to_one[u, j],
-                self.two_to_one[v, (j + 1) % self.num_cities],
-            ): self.distance_matrix[u, v]
+                self.two_to_one[u, j].item(),
+                self.two_to_one[v, (j + 1) % self.num_cities].item(),
+            ): self.distance_matrix[u, v].item()
             for u in range(self.num_cities)
             for v in range(self.num_cities)
             for j in range(self.num_cities)

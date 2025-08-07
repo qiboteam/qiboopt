@@ -818,11 +818,11 @@ class LinearProblem:
             :class:`qiboopt.opt_class.opt_class.QUBO`: Quadratic problem corresponding to squaring the linear function.
 
         """
-        quadraticpart = self.A.T @ self.A + np.diag(2 * (self.b @ self.A))
+        quadratic_part = self.A.T @ self.A + np.diag(2 * (self.b @ self.A))
         offset = np.dot(self.b, self.b)
-        num_rows, num_cols = quadraticpart.shape
+        num_rows, num_cols = quadratic_part.shape
         Qdict = {
-            (i, j): quadraticpart[i, j]
+            (i, j): quadratic_part[i, j].item()
             for i in range(num_rows)
             for j in range(num_cols)
         }
