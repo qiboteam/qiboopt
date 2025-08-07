@@ -195,7 +195,8 @@ class TSP:
 
     Reference:
         1. S. Hadfield, Z. Wang, B. O'Gorman, E. G. Rieffel, D. Venturelli, R. Biswas, *From the Quantum Approximate
-        Optimization Algorithm to a Quantum Alternating Operator Ansatz*. (`arxiv:1709.03489 <https://arxiv.org/abs/1709.03489>`__)
+        Optimization Algorithm to a Quantum Alternating Operator Ansatz*.
+        (`arxiv:1709.03489 <https://arxiv.org/abs/1709.03489>`__)
     """
 
     def __init__(self, distance_matrix, two_to_one=None, backend=None):
