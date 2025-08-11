@@ -1,7 +1,7 @@
 .. _opt_class:
 
-Optimisation class
-------------------
+Optimisation classes
+--------------------
 
 This module contains classes for formulating and solving QUBO and linear problems.
 
@@ -19,7 +19,6 @@ When formulated carefully, QUBO problems can be mapped to solve a host of optimi
     :members:
     :member-order: bysource
 
-
 .. _LP:
 
 Linear Problems
@@ -27,6 +26,6 @@ Linear Problems
 
 Linear problem write up goes here.
 
-.. autoclass:: qiboopt.opt_class.opt_class.linear_problem
+.. autoclass:: qiboopt.opt_class.opt_class.LinearProblem
     :members:
     :member-order: bysource

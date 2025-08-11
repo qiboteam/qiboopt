@@ -3,16 +3,16 @@ import numpy as np
 import pytest
 from qibo.hamiltonians import SymbolicHamiltonian
 
-from qiboopt.combinatorial_classes.combinatorial_classes import (
+from qiboopt.combinatorial.combinatorial import (
+    MIS,
     TSP,
-    Mis,
     _calculate_two_to_one,
     _tsp_mixer,
     _tsp_phaser,
 )
 from qiboopt.opt_class.opt_class import (
     QUBO,
-    linear_problem,
+    LinearProblem,
 )
 
 
@@ -70,58 +70,6 @@ def test_tsp_class():
     ), "TSP.prepare_initial_state did not return a valid state"
 
 
-def run_tests():
-    # Test Setup
-    num_cities = 4
-    distance_matrix = [
-        [0, 10, 15, 20],
-        [10, 0, 35, 25],
-        [15, 35, 0, 30],
-        [20, 25, 30, 0],
-    ]
-    two_to_one = lambda u, j: u * num_cities + j  # Example two_to_one mapping
-    tsp = TSP(num_cities, distance_matrix, two_to_one)  # Assuming TSP class exists
-
-    # Test 1: Basic functionality with a moderate penalty value
-    penalty = 1.0
-    qp = tsp.penalty_method(penalty)
-    assert isinstance(qp, QUBO), "Test 1 Failed: Returned object is not a QUBO."
-    assert len(qp.q_dict) > 0, "Test 1 Failed: QUBO dictionary is empty."
-
-    # Test 2: Zero penalty
-    penalty = 0.0
-    qp = tsp.penalty_method(penalty)
-    for key, value in qp.q_dict.items():
-        expected_value = distance_matrix[key[0] // num_cities][key[1] // num_cities]
-        assert (
-            value == expected_value
-        ), f"Test 2 Failed: Expected {expected_value} but got {value} for key {key}."
-
-    # Test 3: High penalty
-    penalty = 1000.0
-    qp = tsp.penalty_method(penalty)
-    for key, value in qp.q_dict.items():
-        assert (
-            abs(value) >= 1000
-        ), f"Test 3 Failed: Value {value} is less than expected penalty."
-
-    # Test 4: Single city (edge case)
-    tsp.num_cities = 1
-    tsp.distance_matrix = [[0]]
-    qp = tsp.penalty_method(penalty=1.0)
-    assert (
-        len(qp.q_dict) == 0
-    ), "Test 4 Failed: QUBO dictionary should be empty for a single city."
-
-    # Test 5: Two cities (small problem)
-    tsp.num_cities = 2
-    tsp.distance_matrix = [[0, 10], [10, 0]]
-    qp = tsp.penalty_method(penalty=1.0)
-    assert (
-        len(qp.q_dict) > 0
-    ), "Test 5 Failed: QUBO dictionary should not be empty for two cities."
-
-
 @pytest.fixture
 def setup_tsp():
     num_cities = 3
@@ -176,7 +124,7 @@ def test_row_constraints(setup_tsp):
         row_constraint = np.array([0 for _ in range(num_cities**2)])
         for j in range(num_cities):
             row_constraint[two_to_one(v, j)] = 1
-        lp = linear_problem(row_constraint, -1)
+        lp = LinearProblem(row_constraint, -1)
         tmp_qp = lp.square()
         tmp_qp *= penalty
         qp += tmp_qp
@@ -279,7 +227,7 @@ def test_column_constraints(setup_tsp):
         col_constraint = np.array([0 for _ in range(num_cities**2)])
         for v in range(num_cities):
             col_constraint[two_to_one(v, j)] = 1
-        lp = linear_problem(col_constraint, -1)
+        lp = LinearProblem(col_constraint, -1)
         tmp_qp = lp.square()
         tmp_qp *= penalty
         qp += tmp_qp
@@ -465,16 +413,67 @@ def test_tsp_penalty():
     ), f"Expected {expected_q_dict}, but got {qp.Qdict}"
 
 
+# TODO: Check the code and/or test? Seems to conflict with the other tests above?
+# TODO: Can simplify this test using pytest.parametrize? Or merge with the above tests?
+# def test_tsp_penalty_method():
+#     """Test TSP.penalty_method"""
+#     # Setup test parameters
+#     distance_matrix = np.array([
+#         [0, 10, 15, 20],
+#         [10, 0, 35, 25],
+#         [15, 35, 0, 30],
+#         [20, 25, 30, 0],
+#     ])
+#     num_cities = distance_matrix.shape[0]
+#     # two_to_one = lambda u, j: u * num_cities + j  # Example two_to_one mapping
+#     tsp = TSP(distance_matrix)  # Assuming TSP class exists
+#
+#     # Test 1: Basic functionality with zero penalty
+#     penalty = 0.0
+#     qp = tsp.penalty_method(penalty)
+#     assert isinstance(qp, QUBO), "TSP.penalty_method() did not return a QUBO."
+#     assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
+#     for key, value in qp.Qdict.items():
+#         expected_value = distance_matrix[key[0] // num_cities][key[1] // num_cities]
+#         assert (
+#             value == expected_value
+#         ), f"Zero penalty test: Expected {expected_value} but got {value} for key {key}."
+#
+#     # Test 2: High penalty
+#     penalty = 1000.0
+#     qp = tsp.penalty_method(penalty)
+#     for key, value in qp.Qdict.items():
+#         assert (
+#             abs(value) >= 1000
+#         ), f"High penalty test: Value {value} is less than expected penalty."
+#
+#     # Test 3: Single city (edge case)
+#     tsp.num_cities = 1
+#     tsp.distance_matrix = np.zeros((1, 1))
+#     qp = tsp.penalty_method(penalty=1.0)
+#     assert (
+#         not qp.Qdict
+#     ), "Single city test: QUBO dictionary should be empty for a single city."
+#
+#     # Test 4: Two cities (small problem)
+#     tsp.num_cities = 2
+#     tsp.distance_matrix = [[0, 10], [10, 0]]
+#     qp = tsp.penalty_method(penalty=1.0)
+#     assert (
+#         qp.Qdict
+#     ), "Two cities test: QUBO dictionary should not be empty for two cities."
+
+
 def test_mis_class():
     g = nx.Graph()
     g.add_edges_from([(0, 1), (1, 2), (2, 0)])
-    mis = Mis(g)
-    assert mis.n == 3, "Mis class did not set the number of nodes correctly"
-    assert mis.g == g, "Mis class did not set the graph correctly"
+    mis = MIS(g)
+    assert mis.n == 3, "MIS class did not set the number of nodes correctly"
+    assert mis.g == g, "MIS class did not set the graph correctly"
 
     penalty = 10
     qp = mis.penalty_method(penalty)
-    assert isinstance(qp, QUBO), "Mis.penalty_method did not return a QUBO"
+    assert isinstance(qp, QUBO), "MIS.penalty_method did not return a QUBO"
 
     mis_str = str(mis)
-    assert mis_str == "Mis", "Mis.__str__ did not return the expected string"
+    assert mis_str == "MIS", "MIS.__str__ did not return the expected string"

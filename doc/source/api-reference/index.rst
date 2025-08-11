@@ -5,5 +5,5 @@ API Reference
 .. toctree::
     :maxdepth: 1
 
-    combinatorial_classes
+    combinatorial
     opt_class
