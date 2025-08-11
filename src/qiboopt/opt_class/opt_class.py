@@ -225,7 +225,7 @@ class QUBO:
 
         return circuit
 
-    def qubo_to_ising(self, constant=0.0):
+    def qubo_to_ising(self):
         """Convert a QUBO problem to an Ising problem.
 
         Maps a quadratic unconstrained binary optimisation (QUBO) problem defined over binary variables
@@ -238,32 +238,21 @@ class QUBO:
 
              x'  Q  x  = \\text{constant} + s'  J  s + h'  s
 
-        Args:
-            constant (float): Constant offset to be applied to the energy. Defaults to :math:`0.0`.
-
         Returns:
             (dict, dict, float): A 3-tuple containing: ``h``: the linear coefficients of the Ising problem, ``J``:
             the quadratic coefficients of the Ising problem, and constant: the new energy offset.
         """
         h = {}
         J = {}
-        linear_offset = 0.0
-        quadratic_offset = 0.0
+        constant = self.offset
 
         for (u, v), bias in self.Qdict.items():
-            if u == v:
-                h[u] = h.get(u, 0) + bias / 2
-                linear_offset += bias
-
-            else:
-                if bias:
-                    J[(u, v)] = bias / 4
-                h[u] = h.get(u, 0) + bias / 4
-                h[v] = h.get(v, 0) + bias / 4
-                quadratic_offset += bias
-
-        constant += 0.5 * linear_offset + 0.25 * quadratic_offset
-
+            if bias:
+                constant += bias/4
+                h[u] = h.get(u, 0) - bias/4
+                h[v] = h.get(v, 0) - bias/4
+                if u != v:
+                    J[u, v] = bias/4
         return h, J, constant
 
     def construct_symbolic_Hamiltonian_from_QUBO(self):

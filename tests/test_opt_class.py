@@ -60,7 +60,7 @@ def test_qubo_to_ising():
 
     h, J, constant = qp.qubo_to_ising()
 
-    assert h == {0: 1.25, 1: -0.75}
+    assert h == {0: -1.25, 1: 0.75}
     assert J == {(0, 1): 0.25}
     assert constant == 0.25
 
