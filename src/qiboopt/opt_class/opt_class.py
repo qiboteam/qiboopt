@@ -87,7 +87,7 @@ class QUBO:
 
             # next the opt_class biases
             for (u, v), bias in self.J.items():
-                if bias:
+                if bias and u!= v:
                     self.Qdict[(u, v)] = 4.0 * bias
                     self.Qdict[(u, u)] = self.Qdict.get((u, u), 0) - 2.0 * bias
                     self.Qdict[(v, v)] = self.Qdict.get((v, v), 0) - 2.0 * bias
