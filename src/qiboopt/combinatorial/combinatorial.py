@@ -8,12 +8,7 @@ from qibo.backends import _check_backend
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models.circuit import Circuit
 from qibo.symbols import X, Y, Z
-
-from qiboopt.opt_class.opt_class import (
-    QUBO,
-    LinearProblem,
-)
-
+from qiboopt.opt_class.opt_class import QUBO, LinearProblem, variable_to_ind, variable_dict_to_ind_dict
 
 def _calculate_two_to_one(num_cities):
     """
