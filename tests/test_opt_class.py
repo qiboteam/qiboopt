@@ -9,6 +9,8 @@ from qibo.quantum_info import infidelity
 from qiboopt.opt_class.opt_class import (
     QUBO,
     LinearProblem,
+    variable_to_ind,
+    variable_dict_to_ind_dict
 )
 
 
@@ -41,12 +43,13 @@ def test_add_multiplication_operators():
     [
         (
             {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
-            {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
+           {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
         ),
         ({(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}, {3: 1.0, 4: 0.82, 5: 0.23}),
         (15, 13),
     ],
 )
+
 def test_invalid_input_qubo(h, J):
     """Test invalid initialization of the QUBO class"""
     with pytest.raises(TypeError):
@@ -59,7 +62,7 @@ def test_qubo_to_ising():
 
     h, J, constant = qp.qubo_to_ising()
 
-    assert h == {0: 1.25, 1: -0.75}
+    assert h == {0: -1.25, 1: 0.75}
     assert J == {(0, 1): 0.25}
     assert constant == 0.25
 
@@ -107,7 +110,7 @@ def test_initialization_with_h_and_J():
 
     # Initialize QUBO instance with Ising h and J
     qubo_instance = QUBO(offset, h, J)
-    expected_Qdict = {(0, 0): 0.0, (1, 1): 0.0}
+    expected_Qdict = {(0, 0): -3.0, (1, 1): 2.0, (0,1): 2.0}
     assert (
         qubo_instance.Qdict == expected_Qdict
     ), "Qdict should be created based on h and J conversion"
@@ -126,7 +129,7 @@ def test_offset_calculation():
     qubo_instance = QUBO(offset, h, J)
 
     # Expected offset after adjustment: offset + sum(J) - sum(h)
-    expected_offset = offset + sum(J.values()) - sum(h.values())
+    expected_offset = offset + sum(J.values()) + sum(h.values())
 
     # Verify the offset value
     assert (
@@ -141,16 +144,14 @@ def test_isolated_terms_in_h_and_J():
     offset = 1.0
 
     qubo_instance = QUBO(offset, h, J)
-    print(qubo_instance.Qdict)
-    print("check above")
     # Expected Qdict should only contain diagonal terms based on h
-    expected_Qdict = {(0, 0): 0.0, (1, 1): 0.0, (2, 2): 0.0}
+    expected_Qdict = {(0, 0): -3.0, (1, 1): 4.0, (2, 2): -1.0}
     assert (
         qubo_instance.Qdict == expected_Qdict
     ), "Qdict should reflect only h terms when J is empty"
 
     # Expected offset should only adjust based on sum of h values since J is empty
-    expected_offset = offset - sum(h.values())
+    expected_offset = offset + sum(h.values())
     assert (
         qubo_instance.offset == expected_offset
     ), "Offset should adjust only with h values when J is empty"
@@ -568,3 +569,20 @@ def test_linear_square():
     expected_offset = 61
     assert Qdict == expected_Qdict
     assert offset == expected_offset
+
+
+def test_variable_to_ind():
+    variable_list = ['x', 'y', 'qubo']
+    v2i, i2v = variable_to_ind(variable_list)
+    assert v2i == {'x': 0, 'y': 1, 'qubo': 2 }
+    assert i2v == {0: 'x', 1: 'y', 2: 'qubo'}
+
+def test_variable_dict_to_ind_dict():
+    variable_dict = {
+        ('x1', 'x2'): 1.5,
+        ('x2', 'x3'): -0.5,
+        'x3': 2.0
+    }
+    var_to_idx = {'x1': 0, 'x2': 1, 'x3': 2}
+    ans = variable_dict_to_ind_dict(variable_dict, var_to_idx)
+    assert ans == {(0, 1): 1.5, (1, 2): -0.5, 2: 2.0}

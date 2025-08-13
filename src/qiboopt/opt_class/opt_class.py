@@ -78,21 +78,22 @@ class QUBO:
         elif len(args) == 2:
             h = args[0]
             J = args[1]
+            if not all(isinstance(k, int) for k in h.keys()):
+                raise TypeError("All keys in the dictionary must be integers.")
             self.h = h
             self.J = J
-
-            # ZC NOTE: Is this correct?
-            self.Qdict = {(v, v): 2.0 * bias for v, bias in h.items()}
+            self.Qdict = {(v, v): -2.0 * bias for v, bias in h.items()}
+            self.n = 0
 
             # next the opt_class biases
-            for (u, v), bias in self.Qdict.items():
-                if bias:
+            for (u, v), bias in self.J.items():
+                if bias and u!= v:
                     self.Qdict[(u, v)] = 4.0 * bias
                     self.Qdict[(u, u)] = self.Qdict.get((u, u), 0) - 2.0 * bias
                     self.Qdict[(v, v)] = self.Qdict.get((v, v), 0) - 2.0 * bias
 
             # finally adjust the offset based on QUBO definitions rather than Ising formulation
-            self.offset += sum(J.values()) - sum(h.values())
+            self.offset += sum(J.values()) + sum(h.values())
         else:
             raise_error(
                 NotImplementedError, "Invalid number of args in the QUBO constructor."
@@ -224,7 +225,7 @@ class QUBO:
 
         return circuit
 
-    def qubo_to_ising(self, constant=0.0):
+    def qubo_to_ising(self):
         """Convert a QUBO problem to an Ising problem.
 
         Maps a quadratic unconstrained binary optimisation (QUBO) problem defined over binary variables
@@ -237,32 +238,21 @@ class QUBO:
 
              x'  Q  x  = \\text{constant} + s'  J  s + h'  s
 
-        Args:
-            constant (float): Constant offset to be applied to the energy. Defaults to :math:`0.0`.
-
         Returns:
             (dict, dict, float): A 3-tuple containing: ``h``: the linear coefficients of the Ising problem, ``J``:
             the quadratic coefficients of the Ising problem, and constant: the new energy offset.
         """
         h = {}
         J = {}
-        linear_offset = 0.0
-        quadratic_offset = 0.0
+        constant = self.offset
 
         for (u, v), bias in self.Qdict.items():
-            if u == v:
-                h[u] = h.get(u, 0) + bias / 2
-                linear_offset += bias
-
-            else:
-                if bias:
-                    J[(u, v)] = bias / 4
-                h[u] = h.get(u, 0) + bias / 4
-                h[v] = h.get(v, 0) + bias / 4
-                quadratic_offset += bias
-
-        constant += 0.5 * linear_offset + 0.25 * quadratic_offset
-
+            if bias:
+                constant += bias/4
+                h[u] = h.get(u, 0) - bias/4
+                h[v] = h.get(v, 0) - bias/4
+                if u != v:
+                    J[u, v] = bias/4
         return h, J, constant
 
     def construct_symbolic_Hamiltonian_from_QUBO(self):
@@ -825,3 +815,59 @@ class LinearProblem:
             for j in range(num_cols)
         }
         return QUBO(offset, Qdict)
+
+
+def variable_to_ind(variable_list):
+    '''
+    given a list of variable, returns a dictionary from the variables to integers and also
+    a dictionary to map the integer to the variables
+    Args: a list of objects, typically strings
+    returns:
+    Two dictionaries, one map from the variable to the indices and it performs the reverse
+    Example:
+    .. testcode::
+       variables = ["x1", "x2", "x3"]
+       v2i, i2v = variable_to_ind(variables)
+
+        print(v2i)
+        # >>> {'x1': 0, 'x2': 1, 'x3': 2}
+        print(i2v)
+        # >>> {0: 'x1', 1: 'x2', 2: 'x3'}
+    '''
+    var_to_idx = {var: i for i, var in enumerate(variable_list)}
+    idx_to_var = {i: var for i, var in enumerate(variable_list)}
+    return var_to_idx, idx_to_var
+
+
+def variable_dict_to_ind_dict(variable_dict, var_to_idx):
+    '''
+    This functions take in a dictionary that maps from (variable, variable) to float
+    or variable to float convert the dictionary key to the corresponding indices
+    Args:
+        variable_dict: dictionary
+        var_to_idx: a mapping from the variable to an index
+    Returns:
+        a dictionary that maps from indices to
+    Example:
+    .. testcode::
+    var_to_idx = {'x1': 0, 'x2': 1, 'x3': 2}
+
+    variable_dict = {
+        ('x1', 'x2'): 1.5,
+        ('x2', 'x3'): -0.5,
+        'x3': 2.0
+    }
+
+    ind_dict = variable_dict_to_ind_dict(variable_dict, var_to_idx)
+    print(ind_dict)
+    # >>> {(0, 1): 1.5, (1, 2): -0.5, 2: 2.0}
+    '''
+    ind_dict = {}
+    for key, value in variable_dict.items():
+        if isinstance(key, tuple):
+            ind_key = tuple(var_to_idx[var] for var in key)
+        else:
+            ind_key = var_to_idx[key]
+        ind_dict[ind_key] = value
+    return ind_dict
+
