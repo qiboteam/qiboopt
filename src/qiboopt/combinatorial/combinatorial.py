@@ -12,6 +12,8 @@ from qibo.symbols import X, Y, Z
 from qiboopt.opt_class.opt_class import (
     QUBO,
     LinearProblem,
+    variable_to_ind,
+    variable_dict_to_ind_dict
 )
 
 
@@ -23,10 +25,11 @@ def _calculate_two_to_one(num_cities):
         num_cities (int): The number of cities for the TSP.
 
     Returns:
-        (np.ndarray): A 2D array mapping two coordinates to one.
+        (dictionary): An array that map coordinates of two numbers to one.
     """
-    return np.arange(num_cities**2).reshape(num_cities, num_cities)
-
+    pairs = [(i, j) for i in range(num_cities) for j in range(num_cities)]
+    v2i, _ = variable_to_ind(pairs)
+    return v2i
 
 def _tsp_phaser(distance_matrix, backend=None):
     """
@@ -44,8 +47,8 @@ def _tsp_phaser(distance_matrix, backend=None):
     form = 0
     form = sum(
         distance_matrix[u, v]
-        * Z(int(two_to_one[u, i]))
-        * Z(int(two_to_one[v, (i + 1) % num_cities]))
+        * Z(int(two_to_one[(u, i)]))
+        * Z(int(two_to_one[(v, (i + 1) % num_cities)]))
         for i in range(num_cities)
         for u in range(num_cities)
         for v in range(num_cities)
@@ -80,7 +83,7 @@ def _tsp_mixer(num_cities, backend=None):
         Returns:
             SymbolicHamiltonian: The S+ operator.
         """
-        return X(int(two_to_one[u, i])) + 1j * Y(int(two_to_one[u, i]))
+        return X(int(two_to_one[(u, i)])) + 1j * Y(int(two_to_one[(u, i)]))
 
     def sminus(u, i):
         """
@@ -93,7 +96,7 @@ def _tsp_mixer(num_cities, backend=None):
         Returns:
             SymbolicHamiltonian: The S- operator.
         """
-        return X(int(two_to_one[u, i])) - 1j * Y(int(two_to_one[u, i]))
+        return X(int(two_to_one[(u, i)])) - 1j * Y(int(two_to_one[(u, i)]))
 
     form = 0
     form = sum(
@@ -233,7 +236,7 @@ class TSP:
         n = len(ordering)
         c = Circuit(n**2)
         for i in range(n):
-            c.add(gates.X(int(self.two_to_one[ordering[i], i])))
+            c.add(gates.X(int(self.two_to_one[(ordering[i], i)])))
         result = self.backend.execute_circuit(c)
         return result.state()
 
@@ -249,9 +252,9 @@ class TSP:
         """
         q_dict = {
             (
-                self.two_to_one[u, j].item(),
-                self.two_to_one[v, (j + 1) % self.num_cities].item(),
-            ): self.distance_matrix[u, v].item()
+                self.two_to_one[(u, j)],
+                self.two_to_one[(v, (j + 1) % self.num_cities)],
+            ): self.distance_matrix[u, v]
             for u in range(self.num_cities)
             for v in range(self.num_cities)
             for j in range(self.num_cities)
@@ -263,7 +266,7 @@ class TSP:
         for v in range(self.num_cities):
             row_constraint = [0 for _ in range(self.num_cities**2)]
             for j in range(self.num_cities):
-                row_constraint[self.two_to_one[v, j]] = 1
+                row_constraint[self.two_to_one[(v, j)]] = 1
             lp = LinearProblem(row_constraint, -1)
             tmp_qp = lp.square()
             tmp_qp = tmp_qp * penalty
@@ -273,7 +276,7 @@ class TSP:
         for j in range(self.num_cities):
             col_constraint = [0 for _ in range(self.num_cities**2)]
             for v in range(self.num_cities):
-                col_constraint[self.two_to_one[v, j]] = 1
+                col_constraint[self.two_to_one[(v, j)]] = 1
             lp = LinearProblem(col_constraint, -1)
             tmp_qp = lp.square()
             tmp_qp = tmp_qp * penalty
