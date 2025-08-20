@@ -28,8 +28,8 @@ def _calculate_two_to_one(num_cities):
         (dictionary): An array that map coordinates of two numbers to one.
     """
     pairs = [(i, j) for i in range(num_cities) for j in range(num_cities)]
-    v2i, _ = variable_to_ind(pairs)
-    return v2i
+    v2i, i2v = variable_to_ind(pairs)
+    return v2i, i2v
 
 def _tsp_phaser(distance_matrix, backend=None):
     """
@@ -43,7 +43,7 @@ def _tsp_phaser(distance_matrix, backend=None):
         :class:`qibo.hamiltonians.SymbolicHamiltonian`: Phaser Hamiltonian for TSP.
     """
     num_cities = distance_matrix.shape[0]
-    two_to_one = _calculate_two_to_one(num_cities)
+    two_to_one, _ = _calculate_two_to_one(num_cities)
     form = 0
     form = sum(
         distance_matrix[u, v]
@@ -70,7 +70,7 @@ def _tsp_mixer(num_cities, backend=None):
         SymbolicHamiltonian: The mixer Hamiltonian for TSP.
     """
 
-    two_to_one = _calculate_two_to_one(num_cities)
+    two_to_one, _ = _calculate_two_to_one(num_cities)
 
     def splus(u, i):
         """
@@ -207,7 +207,7 @@ class TSP:
 
         self.distance_matrix = distance_matrix
         self.num_cities = distance_matrix.shape[0]
-        self.two_to_one = (
+        self.two_to_one, _ = (
             _calculate_two_to_one(self.num_cities) if two_to_one is None else two_to_one
         )
 
