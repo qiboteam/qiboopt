@@ -18,7 +18,7 @@ from qiboopt.opt_class.opt_class import (
 
 def test__calculate_two_to_one():
     num_cities = 3
-    result = _calculate_two_to_one(num_cities)
+    result, _ = _calculate_two_to_one(num_cities)
     expected_array = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8]])
     expected_dict = {(i, j): int(expected_array[i, j]) for i in range(num_cities) for j in range(num_cities)}
     assert (expected_dict == result), "calculate_two_to_one did not return the expected result"
@@ -424,7 +424,7 @@ def test_tsp_penalty_method():
         [20, 25, 30, 0],
     ])
     num_cities = distance_matrix.shape[0]
-    two_to_one = _calculate_two_to_one(num_cities) # to be edited again, after issue 19 is resolved.
+    two_to_one, one_to_two = _calculate_two_to_one(num_cities)
     tsp = TSP(distance_matrix)
 
     # Test 1: Basic functionality with zero penalty
@@ -433,8 +433,9 @@ def test_tsp_penalty_method():
     assert isinstance(qp, QUBO), "TSP.penalty_method() did not return a QUBO."
     assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
     for key, value in qp.Qdict.items():
-        origin = one_to_two[key[0]]
-        destination = one_to_two[key[1]]
+        # key is a pair of indeces of the QUBO, we have to get the corresponding city.
+        origin = one_to_two[key[0]][0]
+        destination = one_to_two[key[1]][0]
         expected_value = distance_matrix[origin[0]][destination[0]]
         assert (
             value == expected_value
