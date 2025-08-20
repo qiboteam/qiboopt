@@ -433,10 +433,13 @@ def test_tsp_penalty_method():
     assert isinstance(qp, QUBO), "TSP.penalty_method() did not return a QUBO."
     assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
     for key, value in qp.Qdict.items():
-        # key is a pair of indeces of the QUBO, we have to get the corresponding city.
-        origin = one_to_two[key[0]][0]
-        destination = one_to_two[key[1]][0]
-        expected_value = distance_matrix[origin[0]][destination[0]]
+        # key is a pair of indices of the QUBO, we have to get the corresponding city.
+        origin, origin_slot = one_to_two[key[0]] #recall the two indices are of the form of (city, slot)
+        destination, destination_slot = one_to_two[key[1]]
+        if (destination_slot - origin_slot) % num_cities == 1:
+            expected_value = distance_matrix[origin][destination]
+        else:
+            expected_value = 0.0
         assert (
             value == expected_value
         ), f"Zero penalty test: Expected {expected_value} but got {value} for key {key}."
