@@ -415,53 +415,55 @@ def test_tsp_penalty():
 
 # TODO: Check the code and/or test? Seems to conflict with the other tests above?
 # TODO: Can simplify this test using pytest.parametrize? Or merge with the above tests?
-# def test_tsp_penalty_method():
-#     """Test TSP.penalty_method"""
-#     # Setup test parameters
-#     distance_matrix = np.array([
-#         [0, 10, 15, 20],
-#         [10, 0, 35, 25],
-#         [15, 35, 0, 30],
-#         [20, 25, 30, 0],
-#     ])
-#     num_cities = distance_matrix.shape[0]
-#     # two_to_one = lambda u, j: u * num_cities + j  # Example two_to_one mapping
-#     tsp = TSP(distance_matrix)  # Assuming TSP class exists
-#
-#     # Test 1: Basic functionality with zero penalty
-#     penalty = 0.0
-#     qp = tsp.penalty_method(penalty)
-#     assert isinstance(qp, QUBO), "TSP.penalty_method() did not return a QUBO."
-#     assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
-#     for key, value in qp.Qdict.items():
-#         expected_value = distance_matrix[key[0] // num_cities][key[1] // num_cities]
-#         assert (
-#             value == expected_value
-#         ), f"Zero penalty test: Expected {expected_value} but got {value} for key {key}."
-#
-#     # Test 2: High penalty
-#     penalty = 1000.0
-#     qp = tsp.penalty_method(penalty)
-#     for key, value in qp.Qdict.items():
-#         assert (
-#             abs(value) >= 1000
-#         ), f"High penalty test: Value {value} is less than expected penalty."
-#
-#     # Test 3: Single city (edge case)
-#     tsp.num_cities = 1
-#     tsp.distance_matrix = np.zeros((1, 1))
-#     qp = tsp.penalty_method(penalty=1.0)
-#     assert (
-#         not qp.Qdict
-#     ), "Single city test: QUBO dictionary should be empty for a single city."
-#
-#     # Test 4: Two cities (small problem)
-#     tsp.num_cities = 2
-#     tsp.distance_matrix = [[0, 10], [10, 0]]
-#     qp = tsp.penalty_method(penalty=1.0)
-#     assert (
-#         qp.Qdict
-#     ), "Two cities test: QUBO dictionary should not be empty for two cities."
+def test_tsp_penalty_method():
+    """Test TSP.penalty_method
+    """
+    distance_matrix = np.array([
+        [0, 10, 15, 20],
+        [10, 0, 35, 25],
+        [15, 35, 0, 30],
+        [20, 25, 30, 0],
+    ])
+    num_cities = distance_matrix.shape[0]
+    two_to_one = _calculate_two_to_one(num_cities) # to be edited again, after issue 19 is resolved.
+    tsp = TSP(distance_matrix)
+
+    # Test 1: Basic functionality with zero penalty
+    penalty = 0.0
+    qp = tsp.penalty_method(penalty)
+    assert isinstance(qp, QUBO), "TSP.penalty_method() did not return a QUBO."
+    assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
+    for key, value in qp.Qdict.items():
+        origin = one_to_two[key[0]]
+        destination = one_to_two[key[1]]
+        expected_value = distance_matrix[origin[0]][destination[0]]
+        assert (
+            value == expected_value
+        ), f"Zero penalty test: Expected {expected_value} but got {value} for key {key}."
+
+    # Test 2: High penalty
+    penalty = 1000.0
+    qp = tsp.penalty_method(penalty)
+    for key, value in qp.Qdict.items():
+        assert (
+            abs(value) >= 1000
+        ), f"High penalty test: Value {value} is less than expected penalty."
+
+    # Test 3: Single city (edge case)
+    tsp.num_cities = 1
+    tsp.distance_matrix = np.zeros((1, 1))
+    qp = tsp.penalty_method(penalty=1.0)
+    assert (
+        not qp.Qdict
+    ), "Single city test: QUBO dictionary should be empty for a single city."
+
+    # Test 4: Two cities (small problem)
+    tsp.num_cities = 2
+    tsp.distance_matrix = [[0, 10], [10, 0]]
+    qp = tsp.penalty_method(penalty=1.0)
+    assert (
+        qp.Qdict
+    ), "Two cities test: QUBO dictionary should not be empty for two cities."
 
 
 def test_mis_class():
