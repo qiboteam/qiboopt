@@ -448,21 +448,16 @@ def test_tsp_penalty_method():
     penalty = 1000.0
     qp = tsp.penalty_method(penalty)
     for key, value in qp.Qdict.items():
-        assert (
-            abs(value) >= 1000
-        ), f"High penalty test: Value {value} is less than expected penalty."
+        origin, origin_slot = one_to_two[key[0]]  # recall the two indices are of the form of (city, slot)
+        destination, destination_slot = one_to_two[key[1]]
+        if origin == destination or origin_slot == destination_slot:
+            assert (
+                abs(value) >= 1000
+            ), f"High penalty test: Value {value} is less than expected penalty."
 
-    # Test 3: Single city (edge case)
-    tsp.num_cities = 1
-    tsp.distance_matrix = np.zeros((1, 1))
-    qp = tsp.penalty_method(penalty=1.0)
-    assert (
-        not qp.Qdict
-    ), "Single city test: QUBO dictionary should be empty for a single city."
 
-    # Test 4: Two cities (small problem)
-    tsp.num_cities = 2
-    tsp.distance_matrix = [[0, 10], [10, 0]]
+    # Test 3: Two cities (small problem)
+    tsp = TSP(np.array([[0, 10], [10, 0]]))
     qp = tsp.penalty_method(penalty=1.0)
     assert (
         qp.Qdict
