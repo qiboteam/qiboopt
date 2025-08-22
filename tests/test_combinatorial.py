@@ -320,148 +320,35 @@ def test_column_constraints(setup_tsp):
     ), f"Expected {expected_col_constraints}, but got {qp.Qdict}"
 
 
-def test_tsp_penalty():
-    distance_matrix = np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]])
-    tsp = TSP(distance_matrix)
-    qp = tsp.penalty_method(10)
-    expected_q_dict = {
-        (0, 4): 0.9,
-        (1, 5): 0.9,
-        (2, 3): 0.9,
-        (0, 7): 0.8,
-        (1, 8): 0.8,
-        (2, 6): 0.8,
-        (3, 1): 0.4,
-        (4, 2): 0.4,
-        (5, 0): 0.4,
-        (3, 7): 0.1,
-        (4, 8): 0.1,
-        (5, 6): 0.1,
-        (6, 1): 0.0,
-        (7, 2): 0.0,
-        (8, 0): 0.0,
-        (6, 4): 0.7,
-        (7, 5): 0.7,
-        (8, 3): 0.7,
-        (0, 0): -20,
-        (0, 1): 10,
-        (0, 2): 10,
-        (0, 3): 10,
-        (0, 5): 0,
-        (0, 6): 10,
-        (0, 8): 0,
-        (1, 0): 10,
-        (1, 1): -20,
-        (1, 2): 10,
-        (1, 3): 0,
-        (1, 4): 10,
-        (1, 6): 0,
-        (1, 7): 10,
-        (2, 0): 10,
-        (2, 1): 10,
-        (2, 2): -20,
-        (2, 4): 0,
-        (2, 5): 10,
-        (2, 7): 0,
-        (2, 8): 10,
-        (3, 0): 10,
-        (3, 2): 0,
-        (3, 3): -20,
-        (3, 4): 10,
-        (3, 5): 10,
-        (3, 6): 10,
-        (3, 8): 0,
-        (4, 0): 0,
-        (4, 1): 10,
-        (4, 3): 10,
-        (4, 4): -20,
-        (4, 5): 10,
-        (4, 6): 0,
-        (4, 7): 10,
-        (5, 1): 0,
-        (5, 2): 10,
-        (5, 3): 10,
-        (5, 4): 10,
-        (5, 5): -20,
-        (5, 7): 0,
-        (5, 8): 10,
-        (6, 0): 10,
-        (6, 2): 0,
-        (6, 3): 10,
-        (6, 5): 0,
-        (6, 6): -20,
-        (6, 7): 10,
-        (6, 8): 10,
-        (7, 0): 0,
-        (7, 1): 10,
-        (7, 3): 0,
-        (7, 4): 10,
-        (7, 6): 10,
-        (7, 7): -20,
-        (7, 8): 10,
-        (8, 1): 0,
-        (8, 2): 10,
-        (8, 4): 0,
-        (8, 5): 10,
-        (8, 6): 10,
-        (8, 7): 10,
-        (8, 8): -20,
-    }
-    assert (
-        qp.Qdict == expected_q_dict
-    ), f"Expected {expected_q_dict}, but got {qp.Qdict}"
-
-
-# TODO: Check the code and/or test? Seems to conflict with the other tests above?
-# TODO: Can simplify this test using pytest.parametrize? Or merge with the above tests?
-def test_tsp_penalty_method():
-    """Test TSP.penalty_method
-    """
-    distance_matrix = np.array([
-        [0, 10, 15, 20],
-        [10, 0, 35, 25],
-        [15, 35, 0, 30],
-        [20, 25, 30, 0],
-    ])
-    num_cities = distance_matrix.shape[0]
-    two_to_one, one_to_two = _calculate_two_to_one(num_cities)
-    tsp = TSP(distance_matrix)
-
-    # Test 1: Basic functionality with zero penalty
-    penalty = 0.0
+@pytest.mark.parametrize("distance, penalty", [
+    (np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]]), 10),
+    (np.array([[0, 10, 15, 20],[10, 0, 35, 25],[15, 35, 0, 30],[20, 25, 30, 0]]), 0),
+    (np.array([[0, 10, 15, 20],[10, 0, 35, 25],[15, 35, 0, 30],[20, 25, 30, 0]]), 1000.0),
+    (np.array([[0, 10], [10, 0]]), 1.0),
+    (np.array([0]), 1)
+])
+def test_tsp_penalty(distance, penalty):
+    tsp = TSP(distance)
     qp = tsp.penalty_method(penalty)
+    two_to_one, one_to_two = _calculate_two_to_one(tsp.num_cities)
     assert isinstance(qp, QUBO), "TSP.penalty_method() did not return a QUBO."
     assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
     for key, value in qp.Qdict.items():
         # key is a pair of indices of the QUBO, we have to get the corresponding city.
-        origin, origin_slot = one_to_two[key[0]] #recall the two indices are of the form of (city, slot)
+        origin, origin_slot = one_to_two[key[0]]  # recall the two indices are of the form of (city, slot)
         destination, destination_slot = one_to_two[key[1]]
-        if (destination_slot - origin_slot) % num_cities == 1:
-            expected_value = distance_matrix[origin][destination]
+        if origin != destination and (destination_slot - origin_slot) % tsp.num_cities == 1:
+            expected_value = distance[origin][destination]
+        elif origin == destination and origin_slot == destination_slot:
+            expected_value = -2*penalty
+        elif (origin == destination and origin_slot != destination_slot)\
+                or (origin != destination and origin_slot == destination_slot):
+            expected_value = penalty
         else:
             expected_value = 0.0
         assert (
-            value == expected_value
-        ), f"Zero penalty test: Expected {expected_value} but got {value} for key {key}."
-
-    # Test 2: High penalty
-    penalty = 1000.0
-    qp = tsp.penalty_method(penalty)
-    for key, value in qp.Qdict.items():
-        origin, origin_slot = one_to_two[key[0]]  # recall the two indices are of the form of (city, slot)
-        destination, destination_slot = one_to_two[key[1]]
-        if origin == destination or origin_slot == destination_slot:
-            assert (
-                abs(value) >= 1000
-            ), f"High penalty test: Value {value} is less than expected penalty."
-
-
-    # Test 3: Two cities (small problem)
-    tsp = TSP(np.array([[0, 10], [10, 0]]))
-    qp = tsp.penalty_method(penalty=1.0)
-    assert (
-        qp.Qdict
-    ), "Two cities test: QUBO dictionary should not be empty for two cities."
+                value == expected_value
+        ), f"penalty test: Expected {expected_value} but got {value} for key {key}."
 
 
 def test_mis_class():
