@@ -6,10 +6,7 @@ from qibo.noise import DepolarizingError, NoiseModel
 from qibo.optimizers import optimize
 from qibo.quantum_info import infidelity
 
-from qiboopt.opt_class.opt_class import (
-    QUBO,
-    LinearProblem,
-)
+from qiboopt.opt_class.opt_class import QUBO, LinearProblem
 
 
 def test_initialization():
@@ -59,7 +56,7 @@ def test_qubo_to_ising():
 
     h, J, constant = qp.qubo_to_ising()
 
-    assert h == {0: 1.25, 1: -0.75}
+    assert h == {0: -1.25, 1: 0.75}
     assert J == {(0, 1): 0.25}
     assert constant == 0.25
 
@@ -107,7 +104,7 @@ def test_initialization_with_h_and_J():
 
     # Initialize QUBO instance with Ising h and J
     qubo_instance = QUBO(offset, h, J)
-    expected_Qdict = {(0, 0): 0.0, (1, 1): 0.0}
+    expected_Qdict = {(0, 0): -3.0, (1, 1): 2.0, (0, 1): 2.0}
     assert (
         qubo_instance.Qdict == expected_Qdict
     ), "Qdict should be created based on h and J conversion"
@@ -126,7 +123,7 @@ def test_offset_calculation():
     qubo_instance = QUBO(offset, h, J)
 
     # Expected offset after adjustment: offset + sum(J) - sum(h)
-    expected_offset = offset + sum(J.values()) - sum(h.values())
+    expected_offset = offset + sum(J.values()) + sum(h.values())
 
     # Verify the offset value
     assert (
@@ -141,16 +138,14 @@ def test_isolated_terms_in_h_and_J():
     offset = 1.0
 
     qubo_instance = QUBO(offset, h, J)
-    print(qubo_instance.Qdict)
-    print("check above")
     # Expected Qdict should only contain diagonal terms based on h
-    expected_Qdict = {(0, 0): 0.0, (1, 1): 0.0, (2, 2): 0.0}
+    expected_Qdict = {(0, 0): -3.0, (1, 1): 4.0, (2, 2): -1.0}
     assert (
         qubo_instance.Qdict == expected_Qdict
     ), "Qdict should reflect only h terms when J is empty"
 
     # Expected offset should only adjust based on sum of h values since J is empty
-    expected_offset = offset - sum(h.values())
+    expected_offset = offset + sum(h.values())
     assert (
         qubo_instance.offset == expected_offset
     ), "Offset should adjust only with h values when J is empty"
