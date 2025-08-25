@@ -43,7 +43,7 @@ def test_add_multiplication_operators():
     [
         (
             {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
-           {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
+            {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
         ),
         ({(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}, {3: 1.0, 4: 0.82, 5: 0.23}),
         (15, 13),
@@ -116,7 +116,7 @@ def test_initialization_with_h_and_J():
 
     # Initialize QUBO instance with Ising h and J
     qubo_instance = QUBO(offset, h, J)
-    expected_Qdict = {(0, 0): -3.0, (1, 1): 2.0, (0,1): 2.0}
+    expected_Qdict = {(0, 0): -3.0, (1, 1): 2.0, (0, 1): 2.0}
     assert (
         qubo_instance.Qdict == expected_Qdict
     ), "Qdict should be created based on h and J conversion"
