@@ -78,21 +78,21 @@ class QUBO:
         elif len(args) == 2:
             h = args[0]
             J = args[1]
+            if not all(isinstance(k, int) for k in h.keys()):
+                raise TypeError("All keys in the dictionary must be integers.")
             self.h = h
             self.J = J
-
-            # ZC NOTE: Is this correct?
-            self.Qdict = {(v, v): 2.0 * bias for v, bias in h.items()}
+            self.Qdict = {(v, v): -2.0 * bias for v, bias in h.items()}
 
             # next the opt_class biases
-            for (u, v), bias in self.Qdict.items():
-                if bias:
+            for (u, v), bias in self.J.items():
+                if bias and u != v:
                     self.Qdict[(u, v)] = 4.0 * bias
                     self.Qdict[(u, u)] = self.Qdict.get((u, u), 0) - 2.0 * bias
                     self.Qdict[(v, v)] = self.Qdict.get((v, v), 0) - 2.0 * bias
 
             # finally adjust the offset based on QUBO definitions rather than Ising formulation
-            self.offset += sum(J.values()) - sum(h.values())
+            self.offset += sum(J.values()) + sum(h.values())
         else:
             raise_error(
                 NotImplementedError, "Invalid number of args in the QUBO constructor."
@@ -224,7 +224,7 @@ class QUBO:
 
         return circuit
 
-    def qubo_to_ising(self, constant=0.0):
+    def qubo_to_ising(self):
         """Convert a QUBO problem to an Ising problem.
 
         Maps a quadratic unconstrained binary optimisation (QUBO) problem defined over binary variables
@@ -237,32 +237,21 @@ class QUBO:
 
              x'  Q  x  = \\text{constant} + s'  J  s + h'  s
 
-        Args:
-            constant (float): Constant offset to be applied to the energy. Defaults to :math:`0.0`.
-
         Returns:
             (dict, dict, float): A 3-tuple containing: ``h``: the linear coefficients of the Ising problem, ``J``:
             the quadratic coefficients of the Ising problem, and constant: the new energy offset.
         """
         h = {}
         J = {}
-        linear_offset = 0.0
-        quadratic_offset = 0.0
+        constant = self.offset
 
         for (u, v), bias in self.Qdict.items():
-            if u == v:
-                h[u] = h.get(u, 0) + bias / 2
-                linear_offset += bias
-
-            else:
-                if bias:
-                    J[(u, v)] = bias / 4
-                h[u] = h.get(u, 0) + bias / 4
-                h[v] = h.get(v, 0) + bias / 4
-                quadratic_offset += bias
-
-        constant += 0.5 * linear_offset + 0.25 * quadratic_offset
-
+            if bias:
+                constant += bias / 4
+                h[u] = h.get(u, 0) - bias / 4
+                h[v] = h.get(v, 0) - bias / 4
+                if u != v:
+                    J[u, v] = bias / 4
         return h, J, constant
 
     def construct_symbolic_Hamiltonian_from_QUBO(self):

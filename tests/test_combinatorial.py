@@ -10,10 +10,7 @@ from qiboopt.combinatorial.combinatorial import (
     _tsp_mixer,
     _tsp_phaser,
 )
-from qiboopt.opt_class.opt_class import (
-    QUBO,
-    LinearProblem,
-)
+from qiboopt.opt_class.opt_class import QUBO, LinearProblem
 
 
 def test__calculate_two_to_one():
