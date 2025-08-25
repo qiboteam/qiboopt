@@ -1,7 +1,8 @@
+import numpy as np
 from qibo import Circuit, gates
 from qibo.optimizers import optimize
 from qibo.quantum_info import infidelity
-import numpy as np
+
 
 # custom loss function, computes fidelity
 def myloss(parameters, circuit, target):
@@ -9,9 +10,10 @@ def myloss(parameters, circuit, target):
     final_state = circuit().state()
     return infidelity(final_state, target)
 
+
 nqubits = 6
 dims = 2**nqubits
-nlayers  = 2
+nlayers = 2
 
 # Create variational circuit
 circuit = Circuit(nqubits)
@@ -28,7 +30,9 @@ x0 = np.random.uniform(0, 2 * np.pi, nqubits * (2 * nlayers + 1))
 data = np.random.normal(0, 1, size=dims)
 
 # perform optimization
-best, params, extra = optimize(myloss, x0, args=(circuit, data), method='BFGS', options={'maxiter':10})
+best, params, extra = optimize(
+    myloss, x0, args=(circuit, data), method="BFGS", options={"maxiter": 10}
+)
 
 # set final solution to circuit instance
 circuit.set_parameters(params)
@@ -48,7 +52,3 @@ import itertools
 vec_permutations = itertools.product([0, 1], repeat=3)
 for permutation in vec_permutations:
     print(permutation)
-
-
-
-
