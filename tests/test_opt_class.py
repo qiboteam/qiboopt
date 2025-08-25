@@ -6,10 +6,7 @@ from qibo.noise import DepolarizingError, NoiseModel
 from qibo.optimizers import optimize
 from qibo.quantum_info import infidelity
 
-from qiboopt.opt_class.opt_class import (
-    QUBO,
-    LinearProblem,
-)
+from qiboopt.opt_class.opt_class import QUBO, LinearProblem
 
 
 def test_initialization():
@@ -41,13 +38,12 @@ def test_add_multiplication_operators():
     [
         (
             {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
-           {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
+            {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0},
         ),
         ({(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}, {3: 1.0, 4: 0.82, 5: 0.23}),
         (15, 13),
     ],
 )
-
 def test_invalid_input_qubo(h, J):
     """Test invalid initialization of the QUBO class"""
     with pytest.raises(TypeError):
@@ -108,7 +104,7 @@ def test_initialization_with_h_and_J():
 
     # Initialize QUBO instance with Ising h and J
     qubo_instance = QUBO(offset, h, J)
-    expected_Qdict = {(0, 0): -3.0, (1, 1): 2.0, (0,1): 2.0}
+    expected_Qdict = {(0, 0): -3.0, (1, 1): 2.0, (0, 1): 2.0}
     assert (
         qubo_instance.Qdict == expected_Qdict
     ), "Qdict should be created based on h and J conversion"
