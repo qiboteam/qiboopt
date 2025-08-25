@@ -17,8 +17,14 @@ def test__calculate_two_to_one():
     num_cities = 3
     result = _calculate_two_to_one(num_cities)
     expected_array = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8]])
-    expected_dict = {(i, j): int(expected_array[i, j]) for i in range(num_cities) for j in range(num_cities)}
-    assert (expected_dict == result), "calculate_two_to_one did not return the expected result"
+    expected_dict = {
+        (i, j): int(expected_array[i, j])
+        for i in range(num_cities)
+        for j in range(num_cities)
+    }
+    assert (
+        expected_dict == result
+    ), "calculate_two_to_one did not return the expected result"
 
 
 def test__tsp_phaser():
