@@ -83,7 +83,6 @@ class QUBO:
             self.h = h
             self.J = J
             self.Qdict = {(v, v): -2.0 * bias for v, bias in h.items()}
-            self.n = 0
 
             # next the opt_class biases
             for (u, v), bias in self.J.items():
