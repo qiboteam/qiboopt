@@ -12,8 +12,6 @@ from qibo.symbols import X, Y, Z
 from qiboopt.opt_class.opt_class import (
     QUBO,
     LinearProblem,
-    variable_to_ind,
-    variable_dict_to_ind_dict
 )
 
 

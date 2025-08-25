@@ -86,7 +86,7 @@ class QUBO:
 
             # next the opt_class biases
             for (u, v), bias in self.J.items():
-                if bias and u!= v:
+                if bias and u != v:
                     self.Qdict[(u, v)] = 4.0 * bias
                     self.Qdict[(u, u)] = self.Qdict.get((u, u), 0) - 2.0 * bias
                     self.Qdict[(v, v)] = self.Qdict.get((v, v), 0) - 2.0 * bias
@@ -247,11 +247,11 @@ class QUBO:
 
         for (u, v), bias in self.Qdict.items():
             if bias:
-                constant += bias/4
-                h[u] = h.get(u, 0) - bias/4
-                h[v] = h.get(v, 0) - bias/4
+                constant += bias / 4
+                h[u] = h.get(u, 0) - bias / 4
+                h[v] = h.get(v, 0) - bias / 4
                 if u != v:
-                    J[u, v] = bias/4
+                    J[u, v] = bias / 4
         return h, J, constant
 
     def construct_symbolic_Hamiltonian_from_QUBO(self):
