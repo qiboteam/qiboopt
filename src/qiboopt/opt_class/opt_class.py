@@ -21,7 +21,7 @@ class QUBO:
 
     Example:
         .. testcode::
-            from qiboopt.opt_class import QUBO
+            from qiboopt.opt_class.opt_class import QUBO
             Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
             qp1 = QUBO(0, Qdict1)
             print(qp.Qdict1)
@@ -285,7 +285,7 @@ class QUBO:
 
         Example:
             .. testcode::
-                from opt_class import QUBO
+                from qiboopt.opt_class.opt_class import QUBO
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 x = [1, 1]
@@ -314,7 +314,7 @@ class QUBO:
 
         Example:
             .. testcode::
-                from qiboopt.opt_class import QUBO
+                from qiboopt.opt_class.opt_class import QUBO
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 x = [1, 1]
@@ -341,7 +341,7 @@ class QUBO:
 
         Example:
             .. testcode::
-                from qiboopt.opt_class import QUBO
+                from qiboopt.opt_class.opt_class import QUBO
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 best_solution, best_obj_value = qp.tabu_search(50, 5)
@@ -390,7 +390,7 @@ class QUBO:
 
         Example:
             .. testcode::
-                from qiboopt.opt_class import QUBO
+                from qiboopt.opt_class.opt_class import QUBO
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 opt_vector, min_value = qp.brute_force()
