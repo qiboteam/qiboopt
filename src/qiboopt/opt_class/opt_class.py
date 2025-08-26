@@ -21,7 +21,7 @@ class QUBO:
 
     Example:
         .. testcode::
-            from opt_class import QUBO
+            from qiboopt.opt_class import QUBO
             Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
             qp1 = QUBO(0, Qdict1)
             print(qp.Qdict1)
@@ -314,7 +314,7 @@ class QUBO:
 
         Example:
             .. testcode::
-                from opt_class import QUBO
+                from qiboopt.opt_class import QUBO
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 x = [1, 1]
@@ -341,7 +341,7 @@ class QUBO:
 
         Example:
             .. testcode::
-                from opt_class import QUBO
+                from qiboopt.opt_class import QUBO
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 best_solution, best_obj_value = qp.tabu_search(50, 5)
@@ -390,7 +390,7 @@ class QUBO:
 
         Example:
             .. testcode::
-                from opt_class import QUBO
+                from qiboopt.opt_class import QUBO
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 opt_vector, min_value = qp.brute_force()
@@ -723,7 +723,7 @@ class LinearProblem:
     Example:
         .. testcode::
             import numpy as np
-            from opt_class import LinearProblem
+            from qiboopt.opt_class import LinearProblem
             A1 = np.array([[1, 2], [3, 4]])
             b1 = np.array([5, 6])
             lp1 = LinearProblem(A1, b1)
@@ -774,7 +774,7 @@ class LinearProblem:
         Example:
             .. testcode::
                 import numpy as np
-                from opt_class import LinearProblem
+                from qiboopt.opt_class import LinearProblem
                 A = np.array([[1, 2], [3, 4]])
                 b = np.array([5, 6])
                 lp = LinearProblem(A, b)
@@ -793,7 +793,7 @@ class LinearProblem:
 
         Example:
             .. testcode::
-
+                import numpy as np
                 A = np.array([[1, 2], [3, 4]])
                 b = np.array([5, 6])
                 lp = LinearProblem(A, b)
