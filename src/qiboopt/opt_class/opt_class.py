@@ -88,9 +88,9 @@ class QUBO:
             qp = QUBO(0, h, J)
             print(qp.Qdict)
 
-        .. testoutput
+        .. testoutput::
 
-            ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
+            {(3, 3): -2.0, (4, 4): -1.64, (5, 5): -0.46, (0, 1): 2.0, (0, 0): -1.0, (1, 1): -1.0}
 
     """
 
@@ -231,21 +231,6 @@ class QUBO:
                                 layer * betas_per_layer : (layer + 1) * betas_per_layer
                             ]
                         )
-
-                    # print("<<< OLD <<<")
-                    # for data in custom_mixer[layer].raw['queue']:
-                    #     print(data)
-
-                    # num_param_gates = len(
-                    #     custom_mixer[layer].trainable_gates
-                    # )  # sum(1 for data in custom_mixer[layer].raw['queue'] if data['name'] == 'crx')
-                    # new_beta = np.repeat(betas[layer], num_param_gates)
-                    # custom_mixer[layer].set_parameters(new_beta)
-
-                    # print(">>> NEW >>>")
-                    # for data in custom_mixer[layer].raw['queue']:
-                    #     print(data)
-
                 else:
                     self._default_mixer(circuit, betas[layer])
 
@@ -360,7 +345,7 @@ class QUBO:
 
             .. testoutput::
 
-                [1.5, -0.5]
+                [1.5 -0.5]
         """
         grad = np.asarray([self.Qdict.get((i, i), 0) for i in range(self.n)])
         for i in range(self.n):
@@ -393,7 +378,7 @@ class QUBO:
 
             .. testoutput::
 
-                [0, 1]
+                [0 1]
 
             ..testcode::
 
@@ -809,7 +794,7 @@ class LinearProblem:
             lp3 = lp1 + lp2
             print(lp3.A)
 
-        .. testoutput:
+        .. testoutput::
 
             [[3 5]
             [7 9]]
