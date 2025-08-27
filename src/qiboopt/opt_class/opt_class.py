@@ -19,32 +19,7 @@ class QUBO:
     """Initializes a ``QUBO`` class. The ``QUBO`` class can be multiplied by a scalar factor, and multiple ``QUBO``
     instances can be added together.
 
-    Example:
-        .. testcode::
-            from qiboopt.opt_class.opt_class import QUBO
-            Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-            qp1 = QUBO(0, Qdict1)
-            print(qp.Qdict1)
-            # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-            qp1 *= 2
-            print(qp1.Qdict)
-            # >>> {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
-
-            Qdict2 = {(0, 0): 2.0, (1, 1): 1.0}
-            qp2 = QUBO(1, Qdict2)
-            qp3 = qp1 + qp2
-            print(qp3.Qdict)
-            # >>> {(0, 0): 4.0, (0, 1): 1.0, (1, 1): -1.0}
-            print(qp3.offset)
-            # >>> 1.0
-
-            h = {3: 1.0, 4: 0.82, 5: 0.23}
-            J = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-            qp = QUBO(0, h, J)
-            print(qp.Qdict)
-            # >>> ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
-
-    Args:
+        Args:
         offset (float): The constant offset of the QUBO problem.
         args (dict): Input for parameters for QUBO or Ising formulation. If ``len(args) == 1``,
             ``args`` has to be a dictionary representing the quadratic coefficient assigned to the ``QUBO.QDict``
@@ -63,6 +38,34 @@ class QUBO:
                 J (dict): Quadratic biases as a dictionary of the form ``{(u, v): bias, ...}``, where keys are
                     two-tuples of variables of the model and values are biases associated with the interaction between
                     the pair of variables.
+
+    Example:
+        .. testcode::
+
+            from qiboopt.opt_class.opt_class import QUBO
+
+
+            Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+            qp1 = QUBO(0, Qdict1)
+            print(qp.Qdict1)
+            # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+            qp1 *= 2
+            print(qp1.Qdict)
+            # >>> {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
+            Qdict2 = {(0, 0): 2.0, (1, 1): 1.0}
+            qp2 = QUBO(1, Qdict2)
+            qp3 = qp1 + qp2
+            print(qp3.Qdict)
+            # >>> {(0, 0): 4.0, (0, 1): 1.0, (1, 1): -1.0}
+            print(qp3.offset)
+            # >>> 1.0
+
+            h = {3: 1.0, 4: 0.82, 5: 0.23}
+            J = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+            qp = QUBO(0, h, J)
+            print(qp.Qdict)
+            # >>> ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
+
     """
 
     def __init__(self, offset, *args):
@@ -285,7 +288,10 @@ class QUBO:
 
         Example:
             .. testcode::
+
                 from qiboopt.opt_class.opt_class import QUBO
+
+
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 x = [1, 1]
@@ -314,7 +320,10 @@ class QUBO:
 
         Example:
             .. testcode::
+
                 from qiboopt.opt_class.opt_class import QUBO
+
+
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 x = [1, 1]
@@ -341,7 +350,10 @@ class QUBO:
 
         Example:
             .. testcode::
+
                 from qiboopt.opt_class.opt_class import QUBO
+
+
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 best_solution, best_obj_value = qp.tabu_search(50, 5)
@@ -390,7 +402,10 @@ class QUBO:
 
         Example:
             .. testcode::
+
                 from qiboopt.opt_class.opt_class import QUBO
+
+
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
                 opt_vector, min_value = qp.brute_force()
@@ -495,6 +510,8 @@ class QUBO:
 
         Example:
             .. testcode::
+
+                from qiboopt.opt_class.opt_class import QUBO
 
                 Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
                 qp = QUBO(0, Qdict)
@@ -722,8 +739,11 @@ class LinearProblem:
 
     Example:
         .. testcode::
+
             import numpy as np
-            from qiboopt.opt_class import LinearProblem
+            from qiboopt.opt_class.opt_class import LinearProblem
+
+
             A1 = np.array([[1, 2], [3, 4]])
             b1 = np.array([5, 6])
             lp1 = LinearProblem(A1, b1)
@@ -773,8 +793,11 @@ class LinearProblem:
 
         Example:
             .. testcode::
+
                 import numpy as np
-                from qiboopt.opt_class import LinearProblem
+                from qiboopt.opt_class.opt_class import LinearProblem
+
+
                 A = np.array([[1, 2], [3, 4]])
                 b = np.array([5, 6])
                 lp = LinearProblem(A, b)
@@ -793,7 +816,10 @@ class LinearProblem:
 
         Example:
             .. testcode::
+
                 import numpy as np
+                from qiboopt.opt_class.opt_class import LinearProblem
+
                 A = np.array([[1, 2], [3, 4]])
                 b = np.array([5, 6])
                 lp = LinearProblem(A, b)
