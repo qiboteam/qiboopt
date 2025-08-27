@@ -345,7 +345,7 @@ class QUBO:
 
             .. testoutput::
 
-                [1.5 -0.5]
+                [ 1.5 -0.5]
         """
         grad = np.asarray([self.Qdict.get((i, i), 0) for i in range(self.n)])
         for i in range(self.n):
@@ -797,7 +797,7 @@ class LinearProblem:
         .. testoutput::
 
             [[3 5]
-            [7 9]]
+             [7 9]]
 
         .. testcode::
 
