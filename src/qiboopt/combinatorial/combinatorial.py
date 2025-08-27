@@ -129,6 +129,7 @@ class TSP:
             from qibo import gates
             from qibo.models import QAOA
             from qibo.result import CircuitResult
+            from qibo.models.circuit import Circuit
 
 
             def convert_to_standard_Cauchy(config):
@@ -295,7 +296,7 @@ class MIS:
 
             g = nx.Graph()
             g.add_edges_from([(0, 1), (1, 2), (2, 0)])
-            mis = Mis(g)
+            mis = MIS(g)
             penalty = 10
             qp = mis.penalty_method(penalty)
     """
