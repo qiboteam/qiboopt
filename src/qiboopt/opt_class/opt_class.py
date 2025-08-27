@@ -49,45 +49,45 @@ class QUBO:
             qp1 = QUBO(0, Qdict1)
             print(qp1.Qdict)
 
-        ..testoutput::
+        .. testoutput::
 
             {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
 
-        ..testcode::
+        .. testcode::
 
             qp1 *= 2
             print(qp1.Qdict)
 
-        ..testoutput::
+        .. testoutput::
 
             {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
 
-        ..testcode::
+        .. testcode::
 
             Qdict2 = {(0, 0): 2.0, (1, 1): 1.0}
             qp2 = QUBO(1, Qdict2)
             qp3 = qp1 + qp2
             print(qp3.Qdict)
 
-        ..testoutput::
+        .. testoutput::
 
             {(0, 0): 4.0, (0, 1): 1.0, (1, 1): -1.0}
 
-        ..testcode::
+        .. testcode::
 
             print(qp3.offset)
 
-        ..testoutput::
+        .. testoutput::
             1.0
 
-        ..testcode::
+        .. testcode::
 
             h = {3: 1.0, 4: 0.82, 5: 0.23}
             J = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
             qp = QUBO(0, h, J)
             print(qp.Qdict)
 
-        ..testoutput
+        .. testoutput
 
             ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
 
@@ -322,7 +322,7 @@ class QUBO:
                 x = [1, 1]
                 print(qp.evaluate_f(x))
 
-            ..testoutput::
+            .. testoutput::
 
                 0.5
         """
@@ -357,7 +357,7 @@ class QUBO:
                 x = [1, 1]
                 print(qp.evaluate_grad_f(x))
 
-            ..testoutput::
+            .. testoutput::
                 [1.5, -0.5]
         """
         grad = np.asarray([self.Qdict.get((i, i), 0) for i in range(self.n)])
@@ -389,7 +389,7 @@ class QUBO:
                 best_solution, best_obj_value = qp.tabu_search(50, 5)
                 print(best_solution)
 
-            ..testoutput::
+            .. testoutput::
 
                 [0, 1]
 
@@ -450,15 +450,15 @@ class QUBO:
                 opt_vector, min_value = qp.brute_force()
                 print(opt_vector)
 
-            ..testoutput
+            .. testoutput
 
                 [0, 1]
 
-            ..testcode::
+            .. testcode::
 
                 print(min_value)
 
-            ..testoutput
+            .. testoutput
 
                 -1.0
         """
@@ -806,16 +806,16 @@ class LinearProblem:
             lp3 = lp1 + lp2
             print(lp3.A)
 
-        ..testoutput:
+        .. testoutput:
 
             [[3 5]
             [7 9]]
 
-        ..testcode::
+        .. testcode::
 
             print(lp3.b)
 
-        ..testoutput::
+        .. testoutput::
 
             [11 13]
     """
@@ -862,7 +862,8 @@ class LinearProblem:
                 result = lp.evaluate_f(x)
                 print(result)
 
-            ..testoutput::
+            .. testoutput::
+
                 [ 8 13]
 
         Returns:
@@ -887,15 +888,15 @@ class LinearProblem:
                 Quadratic = lp.square()
                 print(Quadratic.Qdict)
 
-            ..testoutput::
+            .. testoutput::
 
                 {(0, 0): 56, (0, 1): 14, (1, 0): 14, (1, 1): 88}
 
-            ..testcode::
+            .. testcode::
 
                 print(Quadratic.offset)
 
-            ..testoutput::
+            .. testoutput::
 
                 61
         """
