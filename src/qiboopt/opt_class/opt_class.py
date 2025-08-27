@@ -78,7 +78,8 @@ class QUBO:
             print(qp3.offset)
 
         .. testoutput::
-            1.0
+
+            1
 
         .. testcode::
 
@@ -358,6 +359,7 @@ class QUBO:
                 print(qp.evaluate_grad_f(x))
 
             .. testoutput::
+
                 [1.5, -0.5]
         """
         grad = np.asarray([self.Qdict.get((i, i), 0) for i in range(self.n)])
@@ -440,6 +442,7 @@ class QUBO:
             (list, float): A list of integers representing the optimal binary vector and its corresponding value
 
         Example:
+
             .. testcode::
 
                 from qiboopt.opt_class.opt_class import QUBO
@@ -450,15 +453,15 @@ class QUBO:
                 opt_vector, min_value = qp.brute_force()
                 print(opt_vector)
 
-            .. testoutput
+            .. testoutput::
 
-                [0, 1]
+                (0, 1)
 
             .. testcode::
 
                 print(min_value)
 
-            .. testoutput
+            .. testoutput::
 
                 -1.0
         """
