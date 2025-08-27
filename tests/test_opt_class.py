@@ -50,6 +50,13 @@ def test_invalid_input_qubo(h, J):
         _qp = QUBO(0, h, J)
 
 
+def test_invalid_number_arguments_qubo():
+    with pytest.raises(
+        NotImplementedError, match="Invalid number of args in the QUBO constructor."
+    ):
+        QUBO(0, {}, {}, {})
+
+
 def test_qubo_to_ising():
     Qdict = {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
     qp = QUBO(0, Qdict)
