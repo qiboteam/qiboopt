@@ -47,24 +47,49 @@ class QUBO:
 
             Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
             qp1 = QUBO(0, Qdict1)
-            print(qp.Qdict1)
-            # >>> {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+            print(qp1.Qdict)
+
+        ..testoutput::
+
+            {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+
+        ..testcode::
+
             qp1 *= 2
             print(qp1.Qdict)
-            # >>> {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
+
+        ..testoutput::
+
+            {(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}
+
+        ..testcode::
+
             Qdict2 = {(0, 0): 2.0, (1, 1): 1.0}
             qp2 = QUBO(1, Qdict2)
             qp3 = qp1 + qp2
             print(qp3.Qdict)
-            # >>> {(0, 0): 4.0, (0, 1): 1.0, (1, 1): -1.0}
+
+        ..testoutput::
+
+            {(0, 0): 4.0, (0, 1): 1.0, (1, 1): -1.0}
+
+        ..testcode::
+
             print(qp3.offset)
-            # >>> 1.0
+
+        ..testoutput::
+            1.0
+
+        ..testcode::
 
             h = {3: 1.0, 4: 0.82, 5: 0.23}
             J = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
             qp = QUBO(0, h, J)
             print(qp.Qdict)
-            # >>> ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
+
+        ..testoutput
+
+            ({3: 1.0, 4: 0.82, 5: 0.23}, {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0})
 
     """
 
@@ -296,7 +321,10 @@ class QUBO:
                 qp = QUBO(0, Qdict)
                 x = [1, 1]
                 print(qp.evaluate_f(x))
-                # >>> 0.5
+
+            ..testoutput::
+
+                0.5
         """
         f_value = self.offset
         for i in range(self.n):
@@ -328,7 +356,9 @@ class QUBO:
                 qp = QUBO(0, Qdict)
                 x = [1, 1]
                 print(qp.evaluate_grad_f(x))
-                # >>> [1.5, -0.5]
+
+            ..testoutput::
+                [1.5, -0.5]
         """
         grad = np.asarray([self.Qdict.get((i, i), 0) for i in range(self.n)])
         for i in range(self.n):
@@ -358,9 +388,18 @@ class QUBO:
                 qp = QUBO(0, Qdict)
                 best_solution, best_obj_value = qp.tabu_search(50, 5)
                 print(best_solution)
-                # >>> [0, 1]
+
+            ..testoutput::
+
+                [0, 1]
+
+            ..testcode::
+
                 print(best_obj_value)
-                # >>> 0.5
+
+            ..testoutput
+
+                0.5
         """
         x = np.random.randint(2, size=self.n)  # Initial solution
         best_solution = x.copy()
@@ -410,9 +449,18 @@ class QUBO:
                 qp = QUBO(0, Qdict)
                 opt_vector, min_value = qp.brute_force()
                 print(opt_vector)
-                # >>> [0, 1]
+
+            ..testoutput
+
+                [0, 1]
+
+            ..testcode::
+
                 print(min_value)
-                # >>> -1.0
+
+            ..testoutput
+
+                -1.0
         """
         opt_vector = min(itertools.product([0, 1], repeat=self.n), key=self.evaluate_f)
         return opt_vector, self.evaluate_f(opt_vector)
@@ -737,6 +785,10 @@ class LinearProblem:
     ``LinearProblem`` class can be multiplied by a scalar factor, and multiple ``LinearProblem`` instances can be added
     together.
 
+    Args:
+        A (np.ndarray): Coefficient matrix.
+        b (np.ndarray): Constant vector.
+
     Example:
         .. testcode::
 
@@ -753,14 +805,19 @@ class LinearProblem:
             lp2 = LinearProblem(A2, b2)
             lp3 = lp1 + lp2
             print(lp3.A)
-            # >>> [[3 5]
-            #      [7 9]]
-            print(lp3.b)
-            # >>> [11 13]
 
-    Args:
-        A (np.ndarray): Coefficient matrix.
-        b (np.ndarray): Constant vector.
+        ..testoutput:
+
+            [[3 5]
+            [7 9]]
+
+        ..testcode::
+
+            print(lp3.b)
+
+        ..testoutput::
+
+            [11 13]
     """
 
     def __init__(self, A, b):
@@ -804,7 +861,9 @@ class LinearProblem:
                 x = np.array([1, 1])
                 result = lp.evaluate_f(x)
                 print(result)
-                # [ 8 13]
+
+            ..testoutput::
+                [ 8 13]
 
         Returns:
             numpy.ndarray: The value of the linear function :math:`Ax + b` at :math:`x`.
@@ -813,6 +872,8 @@ class LinearProblem:
 
     def square(self):
         """Squares the linear problem to obtain a quadratic problem.
+        Returns:
+            :class:`qiboopt.opt_class.opt_class.QUBO`: Quadratic problem corresponding to squaring the linear function.
 
         Example:
             .. testcode::
@@ -825,13 +886,18 @@ class LinearProblem:
                 lp = LinearProblem(A, b)
                 Quadratic = lp.square()
                 print(Quadratic.Qdict)
-                # >>> {(0, 0): 56, (0, 1): 14, (1, 0): 14, (1, 1): 88}
+
+            ..testoutput::
+
+                {(0, 0): 56, (0, 1): 14, (1, 0): 14, (1, 1): 88}
+
+            ..testcode::
+
                 print(Quadratic.offset)
-                # >>> 61
 
-        Returns:
-            :class:`qiboopt.opt_class.opt_class.QUBO`: Quadratic problem corresponding to squaring the linear function.
+            ..testoutput::
 
+                61
         """
         quadratic_part = self.A.T @ self.A + np.diag(2 * (self.b @ self.A))
         offset = np.dot(self.b, self.b)
