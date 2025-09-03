@@ -4,7 +4,7 @@ Quickstart
 Once installed, ``qiboopt`` allows the general user to solve QUBO problems with the built-in ``QUBO`` class.
 Along with the ``QUBO`` class, there are some combinatorial classes found in :class:`qiboopt.combinatorial`.
 
-Formuating a QUBO problem:
+Formulating a QUBO problem:
 
 - Maximal Independent Set:
 
@@ -29,7 +29,7 @@ Formuating a QUBO problem:
    # Brute force search by evaluating all possible binary vectors.
    opt_vector, min_value = qp.brute_force()
 
-Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp``):
+QUBO problems can be solved using the `QAOA <https://arxiv.org/abs/1709.03489>`_ method:
 
 .. code-block:: python
 
@@ -39,7 +39,7 @@ Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp`
    betas = [0.3, 0.4]
    output = qp.train_QAOA(gammas=gammas, betas=betas)
 
-Use `XQAOA <https://arxiv.org/abs/2302.04479>`_ to solve the QUBO problems (``qp``):
+or the more modern `XQAOA <https://arxiv.org/abs/2302.04479>`_ approach:
 
 .. code-block:: python
 
@@ -50,7 +50,7 @@ Use `XQAOA <https://arxiv.org/abs/2302.04479>`_ to solve the QUBO problems (``qp
    alphas = [0.5, 0.6]
    output = qp.train_QAOA(gammas=gammas, betas=betas, alphas=alphas)
 
-Use `QAOA <https://arxiv.org/abs/1709.03489>`_ to solve the QUBO problems (``qp``) using Conditional Variance at Risk (CVaR) loss function:
+The Conditional Variance at Risk (CVaR) can also be used as an alternative loss function in solving the QUBO problem:
 
 .. code-block:: python
 
