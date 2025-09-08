@@ -8,7 +8,14 @@ from qibo.backends import _check_backend
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models.circuit import Circuit
 from qibo.symbols import X, Y, Z
-from qiboopt.opt_class.opt_class import QUBO, LinearProblem, variable_to_ind, variable_dict_to_ind_dict
+
+from qiboopt.opt_class.opt_class import (
+    QUBO,
+    LinearProblem,
+    variable_dict_to_ind_dict,
+    variable_to_ind,
+)
+
 
 def _calculate_two_to_one(num_cities):
     """
@@ -23,6 +30,7 @@ def _calculate_two_to_one(num_cities):
     pairs = [(i, j) for i in range(num_cities) for j in range(num_cities)]
     v2i, i2v = variable_to_ind(pairs)
     return v2i, i2v
+
 
 def _tsp_phaser(distance_matrix, backend=None):
     """

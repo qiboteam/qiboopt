@@ -900,7 +900,7 @@ class LinearProblem:
 
 
 def variable_to_ind(variable_list):
-    '''
+    """
     given a list of variable, returns a dictionary from the variables to integers and also
     a dictionary to map the integer to the variables
     Args: a list of objects, typically strings
@@ -915,14 +915,14 @@ def variable_to_ind(variable_list):
         # >>> {'x1': 0, 'x2': 1, 'x3': 2}
         print(i2v)
         # >>> {0: 'x1', 1: 'x2', 2: 'x3'}
-    '''
+    """
     var_to_idx = {var: i for i, var in enumerate(variable_list)}
     idx_to_var = {i: var for i, var in enumerate(variable_list)}
     return var_to_idx, idx_to_var
 
 
 def variable_dict_to_ind_dict(variable_dict, var_to_idx):
-    '''
+    """
     This functions take in a dictionary that maps from (variable, variable) to float
     or variable to float convert the dictionary key to the corresponding indices
     Args:
@@ -943,7 +943,7 @@ def variable_dict_to_ind_dict(variable_dict, var_to_idx):
     ind_dict = variable_dict_to_ind_dict(variable_dict, var_to_idx)
     print(ind_dict)
     # >>> {(0, 1): 1.5, (1, 2): -0.5, 2: 2.0}
-    '''
+    """
     ind_dict = {}
     for key, value in variable_dict.items():
         if isinstance(key, tuple):
@@ -952,4 +952,3 @@ def variable_dict_to_ind_dict(variable_dict, var_to_idx):
             ind_key = var_to_idx[key]
         ind_dict[ind_key] = value
     return ind_dict
-
