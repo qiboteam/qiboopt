@@ -2,6 +2,8 @@ import networkx as nx
 import numpy as np
 import pytest
 from qibo.hamiltonians import SymbolicHamiltonian
+from qibo.models import QAOA
+from test_models_variational import assert_regression_fixture
 
 from qiboopt.combinatorial.combinatorial import (
     MIS,
@@ -17,8 +19,14 @@ def test__calculate_two_to_one():
     num_cities = 3
     result, _ = _calculate_two_to_one(num_cities)
     expected_array = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8]])
-    expected_dict = {(i, j): int(expected_array[i, j]) for i in range(num_cities) for j in range(num_cities)}
-    assert (expected_dict == result), "calculate_two_to_one did not return the expected result"
+    expected_dict = {
+        (i, j): int(expected_array[i, j])
+        for i in range(num_cities)
+        for j in range(num_cities)
+    }
+    assert (
+        expected_dict == result
+    ), "calculate_two_to_one did not return the expected result"
 
 
 def test__tsp_phaser():
@@ -317,13 +325,26 @@ def test_column_constraints(setup_tsp):
     ), f"Expected {expected_col_constraints}, but got {qp.Qdict}"
 
 
-@pytest.mark.parametrize("distance, penalty", [
-    (np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]]), 10),
-    (np.array([[0, 10, 15, 20], [10, 0, 35, 25], [15, 35, 0, 30], [20, 25, 30, 0]]), 0),
-    (np.array([[0, 10, 15, 20], [10, 0, 35, 25], [15, 35, 0, 30], [20, 25, 30, 0]]), 1000.0),
-    (np.array([[0, 10], [10, 0]]), 1.0),
-    (np.array([0]), 1)
-])
+@pytest.mark.parametrize(
+    "distance, penalty",
+    [
+        (np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]]), 10),
+        (
+            np.array(
+                [[0, 10, 15, 20], [10, 0, 35, 25], [15, 35, 0, 30], [20, 25, 30, 0]]
+            ),
+            0,
+        ),
+        (
+            np.array(
+                [[0, 10, 15, 20], [10, 0, 35, 25], [15, 35, 0, 30], [20, 25, 30, 0]]
+            ),
+            1000.0,
+        ),
+        (np.array([[0, 10], [10, 0]]), 1.0),
+        (np.array([0]), 1),
+    ],
+)
 def test_tsp_penalty(distance, penalty):
     tsp = TSP(distance)
     qp = tsp.penalty_method(penalty)
@@ -332,20 +353,66 @@ def test_tsp_penalty(distance, penalty):
     assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
     for key, value in qp.Qdict.items():
         # key is a pair of indices of the QUBO, we have to get the corresponding city.
-        origin, origin_slot = one_to_two[key[0]]  # recall the two indices are of the form of (city, slot)
+        origin, origin_slot = one_to_two[
+            key[0]
+        ]  # recall the two indices are of the form of (city, slot)
         destination, destination_slot = one_to_two[key[1]]
-        if origin != destination and (destination_slot - origin_slot) % tsp.num_cities == 1:
+        if (
+            origin != destination
+            and (destination_slot - origin_slot) % tsp.num_cities == 1
+        ):
             expected_value = distance[origin][destination]
         elif origin == destination and origin_slot == destination_slot:
-            expected_value = -2*penalty
-        elif (origin == destination and origin_slot != destination_slot)\
-                or (origin != destination and origin_slot == destination_slot):
+            expected_value = -2 * penalty
+        elif (origin == destination and origin_slot != destination_slot) or (
+            origin != destination and origin_slot == destination_slot
+        ):
             expected_value = penalty
         else:
             expected_value = 0.0
         assert (
-                value == expected_value
+            value == expected_value
         ), f"penalty test: Expected {expected_value} but got {value} for key {key}."
+
+
+def qaoa_function_of_layer(backend, layer):
+    """
+    This is a function to study the impact of the number of layers on QAOA, it takes
+    in the number of layers and compute the distance of the mode of the histogram obtained
+    from QAOA
+    """
+    num_cities = 3
+    distance_matrix = np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]])
+    # there are two possible cycles, one with distance 1, one with distance 1.9
+    distance_matrix = distance_matrix.round(1)
+
+    small_tsp = TSP(distance_matrix, backend=backend)
+    initial_state = small_tsp.prepare_initial_state([i for i in range(num_cities)])
+    obj_hamil, mixer = small_tsp.hamiltonians()
+    qaoa = QAOA(obj_hamil, mixer=mixer)
+    initial_state = backend.cast(initial_state, copy=True)
+    best_energy, final_parameters, extra = qaoa.minimize(
+        initial_p=[0.1 for i in range(layer)],
+        initial_state=initial_state,
+        method="BFGS",
+        options={"maxiter": 1},
+    )
+    qaoa.set_parameters(final_parameters)
+    return qaoa.execute(initial_state)
+
+
+@pytest.mark.parametrize("nlayers", [2, 4])
+def test_tsp(backend, nlayers):
+    if nlayers == 4 and backend.platform in ("cupy", "cuquantum"):
+        pytest.skip("Failing for cupy and cuquantum.")
+    final_state = backend.to_numpy(qaoa_function_of_layer(backend, nlayers))
+    atol = 4e-5 if backend.platform in ("cupy", "cuquantum") else 1e-5
+    assert_regression_fixture(
+        backend, final_state.real, f"tsp_layer{nlayers}_real.out", rtol=1e-3, atol=atol
+    )
+    assert_regression_fixture(
+        backend, final_state.imag, f"tsp_layer{nlayers}_imag.out", rtol=1e-3, atol=atol
+    )
 
 
 def test_mis_class():
