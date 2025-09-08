@@ -5,13 +5,7 @@ from qibo.models import QAOA
 from qibo.noise import DepolarizingError, NoiseModel
 from qibo.optimizers import optimize
 from qibo.quantum_info import infidelity
-
-from qiboopt.opt_class.opt_class import (
-    QUBO,
-    LinearProblem,
-    variable_dict_to_ind_dict,
-    variable_to_ind,
-)
+from qiboopt.opt_class.opt_class import QUBO, LinearProblem, variable_dict_to_ind_dict, variable_to_ind
 
 
 def test_initialization():
@@ -53,6 +47,13 @@ def test_invalid_input_qubo(h, J):
     """Test invalid initialization of the QUBO class"""
     with pytest.raises(TypeError):
         _qp = QUBO(0, h, J)
+
+
+def test_invalid_number_arguments_qubo():
+    with pytest.raises(
+        NotImplementedError, match="Invalid number of args in the QUBO constructor."
+    ):
+        QUBO(0, {}, {}, {})
 
 
 def test_qubo_to_ising():

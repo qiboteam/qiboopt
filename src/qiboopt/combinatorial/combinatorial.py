@@ -8,13 +8,7 @@ from qibo.backends import _check_backend
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models.circuit import Circuit
 from qibo.symbols import X, Y, Z
-
-from qiboopt.opt_class.opt_class import (
-    QUBO,
-    LinearProblem,
-    variable_dict_to_ind_dict,
-    variable_to_ind,
-)
+from qiboopt.opt_class.opt_class import QUBO, LinearProblem, variable_dict_to_ind_dict, variable_to_ind,
 
 
 def _calculate_two_to_one(num_cities):
@@ -136,6 +130,7 @@ class TSP:
             from qibo import gates
             from qibo.models import QAOA
             from qibo.result import CircuitResult
+            from qibo.models.circuit import Circuit
 
 
             def convert_to_standard_Cauchy(config):
@@ -302,7 +297,7 @@ class MIS:
 
             g = nx.Graph()
             g.add_edges_from([(0, 1), (1, 2), (2, 0)])
-            mis = Mis(g)
+            mis = MIS(g)
             penalty = 10
             qp = mis.penalty_method(penalty)
     """
