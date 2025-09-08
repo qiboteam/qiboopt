@@ -5,7 +5,13 @@ from qibo.models import QAOA
 from qibo.noise import DepolarizingError, NoiseModel
 from qibo.optimizers import optimize
 from qibo.quantum_info import infidelity
-from qiboopt.opt_class.opt_class import QUBO, LinearProblem, variable_dict_to_ind_dict, variable_to_ind
+
+from qiboopt.opt_class.opt_class import (
+    QUBO,
+    LinearProblem,
+    variable_dict_to_ind_dict,
+    variable_to_ind,
+)
 
 
 def test_initialization():
