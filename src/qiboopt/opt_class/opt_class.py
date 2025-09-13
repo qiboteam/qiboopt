@@ -98,9 +98,7 @@ class QUBO:
         self.offset = offset
         # Check that all of *args are dictionaries
         if not all(isinstance(arg, dict) for arg in args):
-            raise_error(
-                TypeError, "args in a QUBO constructor can only be dictionaries."
-            )
+            raise_error(TypeError, "args in a QUBO constructor can only be dictionaries.")
         if len(args) == 1:
             self.Qdict = args[0]
             self.h, self.J, self.ising_constant = self.qubo_to_ising()
@@ -123,9 +121,7 @@ class QUBO:
             # finally adjust the offset based on QUBO definitions rather than Ising formulation
             self.offset += sum(J.values()) + sum(h.values())
         else:
-            raise_error(
-                NotImplementedError, "Invalid number of args in the QUBO constructor."
-            )
+            raise_error(NotImplementedError, "Invalid number of args in the QUBO constructor.")
 
         self.n = max(max(key) for key in self.Qdict) + 1 if self.Qdict else 0
 
@@ -164,9 +160,7 @@ class QUBO:
         This step encodes the interaction terms into the quantum circuit.
         """
         # Apply R_z gates for diagonal terms (h_i)
-        circuit.add(
-            gates.RZ(i, -2 * gamma * self.h[i]) for i in range(self.n)
-        )  # -2 * gamma * h_i
+        circuit.add(gates.RZ(i, -2 * gamma * self.h[i]) for i in range(self.n))  # -2 * gamma * h_i
 
         # Apply CNOT and R_z for off-diagonal terms (J_ij)
         for i in range(self.n):
@@ -175,9 +169,7 @@ class QUBO:
                     weight = self.J[(i, j)]
                     if weight:
                         circuit.add(gates.CNOT(i, j))
-                        circuit.add(
-                            gates.RZ(j, -2 * gamma * weight)
-                        )  # -2 * gamma * J_ij
+                        circuit.add(gates.RZ(j, -2 * gamma * weight))  # -2 * gamma * J_ij
                         circuit.add(gates.CNOT(i, j))
 
     def _default_mixer(self, circuit, beta, alpha=None):
@@ -213,23 +205,17 @@ class QUBO:
             else:
                 if custom_mixer:
                     if len(gammas) != len(betas):
-                        raise_error(
-                            ValueError, f"Input {len(gammas) = } != {len(betas) = }."
-                        )
+                        raise_error(ValueError, f"Input {len(gammas) = } != {len(betas) = }.")
 
                     # Extract number of betas per layer
                     betas_per_layer = len(betas) // p
                     if len(custom_mixer) == 1:
                         circuit += custom_mixer[0](
-                            betas[
-                                layer * betas_per_layer : (layer + 1) * betas_per_layer
-                            ]
+                            betas[layer * betas_per_layer : (layer + 1) * betas_per_layer]
                         )
                     elif len(custom_mixer) == len(gammas):
                         circuit += custom_mixer[layer](
-                            betas[
-                                layer * betas_per_layer : (layer + 1) * betas_per_layer
-                            ]
+                            betas[layer * betas_per_layer : (layer + 1) * betas_per_layer]
                         )
                 else:
                     self._default_mixer(circuit, betas[layer])
@@ -489,9 +475,7 @@ class QUBO:
             circuit = self._build(gammas, betas, alphas)
         else:
             if custom_mixer:
-                circuit = self._build(
-                    gammas, betas, alphas=None, custom_mixer=custom_mixer
-                )
+                circuit = self._build(gammas, betas, alphas=None, custom_mixer=custom_mixer)
             else:
                 circuit = self._build(gammas, betas)
         return circuit
@@ -581,9 +565,7 @@ class QUBO:
         self.n_layers = p
         self.num_betas = len(betas)
 
-        circuit = self.qubo_to_qaoa_circuit(
-            gammas, betas, alphas=alphas, custom_mixer=custom_mixer
-        )
+        circuit = self.qubo_to_qaoa_circuit(gammas, betas, alphas=alphas, custom_mixer=custom_mixer)
         if noise_model is not None:
             circuit = noise_model.apply(circuit)
 
@@ -677,14 +659,10 @@ class QUBO:
 
                 # Normalize frequencies to probabilities
                 total_counts = sum(energy_dict.values())
-                energy_probs = {
-                    key: value / total_counts for key, value in energy_dict.items()
-                }
+                energy_probs = {key: value / total_counts for key, value in energy_dict.items()}
 
                 # Sort energies and compute cumulative probability
-                sorted_energies = sorted(
-                    energy_probs.items()
-                )  # List of (energy, probability)
+                sorted_energies = sorted(energy_probs.items())  # List of (energy, probability)
                 cumulative_prob = 0
                 selected_energies = []
 
@@ -699,10 +677,7 @@ class QUBO:
                     cumulative_prob += prob
 
                 # Compute CVaR as weighted average of selected energies
-                cvar = (
-                    sum(energy * prob for energy, prob in selected_energies)
-                    / cvar_delta
-                )
+                cvar = sum(energy * prob for energy, prob in selected_energies) / cvar_delta
                 return cvar
 
         best, params, extra = optimize(
@@ -892,9 +867,7 @@ class LinearProblem:
         offset = np.dot(self.b, self.b)
         num_rows, num_cols = quadratic_part.shape
         Qdict = {
-            (i, j): quadratic_part[i, j].item()
-            for i in range(num_rows)
-            for j in range(num_cols)
+            (i, j): quadratic_part[i, j].item() for i in range(num_rows) for j in range(num_cols)
         }
         return QUBO(offset, Qdict)
 
