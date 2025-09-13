@@ -130,7 +130,7 @@ class TSP:
     Example:
         .. testcode::
 
-            from qibo.models.tsp import TSP
+            from qiboopt.combinatorial import TSP
             import numpy as np
             from collections import defaultdict
             from qibo import gates
