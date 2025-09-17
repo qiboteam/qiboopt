@@ -565,19 +565,10 @@ class QUBO:
         self.n_layers = p
         self.num_betas = len(betas)
 
-        circuit = self.qubo_to_qaoa_circuit(gammas, betas, alphas=alphas, custom_mixer=custom_mixer)
-        if noise_model is not None:
-            circuit = noise_model.apply(circuit)
-
-        n_params = 3 * p if alphas else 2 * p
-
-        # Block packing: [all gammas][all betas][all alphas]
         parameters = list(gammas) + list(betas)
         if alphas is not None:
             parameters += list(alphas)
-
         if regular_loss:
-
             def myloss(parameters):
                 """
                 Computes the expectation value as loss.
@@ -603,8 +594,6 @@ class QUBO:
                 )
                 if noise_model is not None:
                     circuit = noise_model.apply(circuit)
-                # print("Regular loss" "s circuit:\n")
-                # print(circuit)
 
                 result = circuit(None, nshots)
                 result_counter = result.frequencies(binary=True)
@@ -642,12 +631,6 @@ class QUBO:
                 )
                 if noise_model is not None:
                     circuit = noise_model.apply(circuit)
-                # print("CVaR loss" "s circuit:\n")
-                # print(circuit)
-                # print(">> Optimisation step:\n")
-                # for data in circuit.raw["queue"]:
-                #     print(data)
-
                 result = backend.execute_circuit(circuit, nshots=nshots)
                 result_counter = result.frequencies(binary=True)
 
@@ -667,17 +650,17 @@ class QUBO:
                 selected_energies = []
 
                 for energy, prob in sorted_energies:
-                    if cumulative_prob + prob > cvar_delta:
+                    if cumulative_prob + prob > delta:
                         # Include only the fraction of the probability needed to reach `cvar_delta`
-                        excess_prob = cvar_delta - cumulative_prob
+                        excess_prob = delta - cumulative_prob
                         selected_energies.append((energy, excess_prob))
-                        cumulative_prob = cvar_delta
+                        cumulative_prob = delta
                         break
                     selected_energies.append((energy, prob))
                     cumulative_prob += prob
 
                 # Compute CVaR as weighted average of selected energies
-                cvar = sum(energy * prob for energy, prob in selected_energies) / cvar_delta
+                cvar = sum(energy * prob for energy, prob in selected_energies) / delta
                 return cvar
 
         best, params, extra = optimize(
