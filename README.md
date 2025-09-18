@@ -8,7 +8,9 @@ For the complete documentation on qiboopt, please refer to [qiboopt](https://qib
 
 ## Minimum working example
 
-Constructing a Maximal Independent Set problem as a QUBO and solving it using [QAOA](https://arxiv.org/abs/1709.03489):
+This repository can create QAOA circuits given a QUBO. For certain applications such as maximum independent set, more functionalities have been build in.
+
+For example, to construct a [Maximal Independent Set](https://en.wikipedia.org/wiki/Maximal_independent_set) problem instance as a QUBO and solving it using [QAOA](https://arxiv.org/abs/1709.03489):
 
 ```python
 import networkx as nx
