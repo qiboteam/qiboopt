@@ -8,7 +8,7 @@ For the complete documentation on qiboopt, please refer to [qiboopt](https://qib
 
 ## Minimum working example
 
-This repository can create QAOA circuits given a QUBO. For certain applications such as maximum independent set, more functionalities have been build in.
+This repository can create QAOA circuits given a QUBO. For certain applications such as maximum independent set and traveling salesman problem, more functionalities have been coded to prepare the QUBO faster. 
 
 For example, to construct a [Maximal Independent Set](https://en.wikipedia.org/wiki/Maximal_independent_set) problem instance as a QUBO and solving it using [QAOA](https://arxiv.org/abs/1709.03489):
 
