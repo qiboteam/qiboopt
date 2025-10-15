@@ -336,3 +336,261 @@ class MIS:
 
     def __str__(self):
         return self.__class__.__name__
+    
+
+import numpy as np
+import networkx as nx
+from qibo import gates
+from qibo.backends import _check_backend
+from qibo.hamiltonians import SymbolicHamiltonian
+from qibo.models.circuit import Circuit
+from qibo.symbols import X, Z
+
+from qiboopt.opt_class.opt_class import QUBO
+
+
+def _ensure_weight_matrix(g_or_w):
+    """
+    Accepts either:
+      - a symmetric numpy array (n x n) with zero diagonal, or
+      - a networkx.Graph with optional 'weight' on edges (default 1.0).
+    Returns:
+      W (np.ndarray, shape [n, n]), node_list (list): order of nodes if graph given.
+    """
+    if isinstance(g_or_w, np.ndarray):
+        W = np.array(g_or_w, dtype=float)
+        if W.shape[0] != W.shape[1]:
+            raise ValueError("Weight matrix must be square.")
+        if not np.allclose(W, W.T, atol=1e-12):
+            raise ValueError("Weight matrix must be symmetric for Max-Cut.")
+        np.fill_diagonal(W, 0.0)
+        node_list = list(range(W.shape[0]))
+        return W, node_list
+
+    if isinstance(g_or_w, nx.Graph):
+        nodes = list(g_or_w.nodes())
+        n = len(nodes)
+        idx = {u: i for i, u in enumerate(nodes)}
+        W = np.zeros((n, n), dtype=float)
+        for u, v, data in g_or_w.edges(data=True):
+            w = float(data.get("weight", 1.0))
+            i, j = idx[u], idx[v]
+            if i == j:
+                continue
+            W[i, j] = W[j, i] = w
+        return W, nodes
+
+    raise TypeError("Expected a numpy array or a networkx.Graph.")
+
+
+def _maxcut_phaser(weight_matrix, backend=None, drop_constant=True):
+    """
+    Builds the Max-Cut objective (phase-separator) Hamiltonian:
+      H_C = sum_{i<j} w_ij * (1 - Z_i Z_j)/2
+    Constants can be dropped since they only shift energy.
+    """
+    n = weight_matrix.shape[0]
+    form = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            w = weight_matrix[i, j]
+            if w == 0:
+                continue
+            # keep only the ZZ term by default (constant dropped)
+            form += (-0.5 * w) * Z(i) * Z(j)
+            # if you ever want the constant term: add (+0.5*w) to a running scalar
+            # but SymbolicHamiltonian doesn't need it for optimization/QAOA.
+    return SymbolicHamiltonian(form, backend=backend)
+
+
+def _maxcut_mixer(n, backend=None):
+    """
+    Standard (unconstrained) QAOA mixer for Max-Cut:
+      H_M = sum_i X_i
+    """
+    form = 0
+    for i in range(n):
+        form += X(i)
+    return SymbolicHamiltonian(form, backend=backend)
+
+
+class MaxCut:
+    """
+    Max-Cut problem (unconstrained) with QUBO and QAOA-ready Hamiltonians.
+
+    Args:
+        graph_or_weights: either a symmetric (n x n) numpy array of weights
+                          or a networkx.Graph with 'weight' on edges (default 1.0).
+        backend: qibo backend; if None uses global backend.
+
+    Example:
+        .. testcode::
+
+            import numpy as np
+            from qibo.models import QAOA
+
+            W = np.array([
+                [0, 0.8, 0.8, 0.8, 0.8],
+                [0.8, 0, 0.8, 0.8, 0.8],
+                [0.8, 0.8, 0, 0.2, 0.2],
+                [0.8, 0.8, 0.2, 0, 0.2],
+                [0.8, 0.8, 0.2, 0.2, 0]
+            ])
+
+            mc = MaxCut(W)
+            obj_h, mix_h = mc.hamiltonians()
+
+            # QAOA (start from |+>^n)
+            init_state = mc.prepare_initial_state(init="plus")
+
+            qaoa = QAOA(obj_h, mixer=mix_h)
+            best_energy, params, _ = qaoa.minimize(initial_p=[0.1]*2,
+                                                   initial_state=init_state,
+                                                   method='BFGS')
+
+            # Optional: QUBO coefficients for classical solvers
+            qubo = mc.to_qubo()
+            # qubo.q_dict has (i,j) -> coefficient, including diagonals for linear terms.
+    """
+
+    def __init__(self, graph_or_weights, backend=None):
+        self.backend = _check_backend(backend)
+        self.W, self.nodes = _ensure_weight_matrix(graph_or_weights)
+        self.n = self.W.shape[0]
+        # index <-> node mapping (useful if a networkx graph was provided)
+        self.ind_to_node = {i: u for i, u in enumerate(self.nodes)}
+        self.node_to_ind = {u: i for i, u in enumerate(self.nodes)}
+
+    # ---------- Hamiltonians (for QAOA) ----------
+    def hamiltonians(self):
+        """
+        Returns:
+            (SymbolicHamiltonian, SymbolicHamiltonian):
+                (phase-separator, mixer)
+        """
+        return (
+            _maxcut_phaser(self.W, backend=self.backend),
+            _maxcut_mixer(self.n, backend=self.backend),
+        )
+
+    # ---------- Initial states ----------
+    def prepare_initial_state(self, init="plus", bitstring=None):
+        """
+        Prepare an initial state for QAOA.
+        Options:
+          - init="plus": |+>^n (Hadamard on all qubits), the standard QAOA start.
+          - init="bitstring": computational basis per 'bitstring' (list/str of 0/1).
+          - init="random": random computational basis (uniform over {0,1}^n).
+
+        Returns:
+            np.ndarray: state vector from backend.execute_circuit(c)
+        """
+        c = Circuit(self.n)
+        if init == "plus":
+            for i in range(self.n):
+                c.add(gates.H(i))
+        elif init == "bitstring":
+            if bitstring is None:
+                raise ValueError("Provide 'bitstring' when init='bitstring'.")
+            if isinstance(bitstring, str):
+                bits = [int(b) for b in bitstring.strip()]
+            else:
+                bits = list(map(int, bitstring))
+            if len(bits) != self.n:
+                raise ValueError("Bitstring length must equal number of vertices.")
+            for i, b in enumerate(bits):
+                if b == 1:
+                    c.add(gates.X(i))
+        elif init == "random":
+            rng = np.random.default_rng()
+            for i, b in enumerate(rng.integers(0, 2, size=self.n)):
+                if b == 1:
+                    c.add(gates.X(i))
+        else:
+            raise ValueError("init must be one of {'plus','bitstring','random'}.")
+
+        result = self.backend.execute_circuit(c)
+        return result.state()
+
+    # ---------- QUBO ----------
+    def to_qubo(self, maximize=True):
+        """
+        Build the QUBO representation:
+            Cut(x) = sum_{i<j} w_ij [x_i XOR x_j]
+                   = sum_{i<j} w_ij (x_i + x_j - 2 x_i x_j)
+
+        In QUBO form (using diagonals for linear terms, since x_i^2 = x_i):
+            For each i<j:
+              q_{ii} += w_ij
+              q_{jj} += w_ij
+              q_{ij} += -2 w_ij
+
+        Max-Cut is a maximization. Most QUBO solvers *minimize*, so by default we
+        negate the objective (maximize=True -> minimize -Cut). If you need the
+        maximizing form, pass maximize=False to leave signs as-is.
+
+        Returns:
+            QUBO: qiboopt QUBO object with q_dict filled.
+        """
+        q = {}
+        n = self.n
+        for i in range(n):
+            for j in range(i + 1, n):
+                w = self.W[i, j]
+                if w == 0:
+                    continue
+                lin = w
+                quad = -2.0 * w
+                # sign flip if we want to minimize (standard) instead of maximize
+                s = -1.0 if maximize else 1.0
+                # diagonals accumulate linear terms
+                q[(i, i)] = q.get((i, i), 0.0) + s * lin
+                q[(j, j)] = q.get((j, j), 0.0) + s * lin
+                # off-diagonal quadratic term
+                q[(i, j)] = q.get((i, j), 0.0) + s * quad
+
+        return QUBO(0.0, q)
+
+    # ---------- Utilities ----------
+    def cut_value(self, bits):
+        """
+        Evaluate cut weight for a bit assignment.
+        Args:
+            bits: list/array/str of 0/1 of length n (1 means S', 0 means S).
+        Returns:
+            float: sum_{i<j} w_ij * [bits_i XOR bits_j]
+        """
+        if isinstance(bits, str):
+            x = np.array([int(b) for b in bits.strip()], dtype=int)
+        else:
+            x = np.array(bits, dtype=int)
+        if x.size != self.n:
+            raise ValueError("Assignment length must equal number of vertices.")
+
+        val = 0.0
+        for i in range(self.n):
+            for j in range(i + 1, self.n):
+                if self.W[i, j] == 0:
+                    continue
+                val += self.W[i, j] * (x[i] ^ x[j])
+        return float(val)
+
+    def partition_from_bits(self, bits):
+        """
+        Convert a bitstring to sets S, S' with original node labels (if graph input).
+        Returns:
+            (set, set): S (bit 0), S' (bit 1)
+        """
+        if isinstance(bits, str):
+            x = [int(b) for b in bits.strip()]
+        else:
+            x = list(map(int, bits))
+        if len(x) != self.n:
+            raise ValueError("Assignment length must equal number of vertices.")
+
+        S = {self.ind_to_node[i] for i, b in enumerate(x) if b == 0}
+        Sp = {self.ind_to_node[i] for i, b in enumerate(x) if b == 1}
+        return S, Sp
+
+    def __str__(self):
+        return f"{self.__class__.__name__}(n={self.n})"
