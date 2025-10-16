@@ -389,9 +389,15 @@ def _edge_list_from_W(W, tol=1e-12):
 
 def _maxcut_phaser(weight_matrix, backend=None, drop_constant=True):
     """
-    Builds the Max-Cut objective (phase-separator) Hamiltonian:
-      H_C = sum_{i<j} w_ij * (1 - Z_i Z_j)/2
-    Constants can be dropped since they only shift energy.
+    Phase-separator for Max-Cut.
+
+    We use the convention where the classical optimizer MINIMIZES the expectation
+    value of the Hamiltonian. To align this with MAXIMIZING the cut, we drop the
+    constant and use +0.5 * w_ij * Z_i Z_j so that minimizing energy prefers
+    anti-aligned spins on edges (Z_i Z_j -> -1), i.e. larger cuts.
+
+      Original:  H = sum_{i<j} w_ij * (1 - Z_i Z_j)/2
+      Dropping constant => proportional to (+0.5) * sum w_ij * Z_i Z_j
     """
     n = weight_matrix.shape[0]
     form = 0
@@ -401,21 +407,37 @@ def _maxcut_phaser(weight_matrix, backend=None, drop_constant=True):
             if w == 0:
                 continue
             # keep only the ZZ term by default (constant dropped)
-            form += (-0.5 * w) * Z(i) * Z(j)
+            form += (0.5 * w) * Z(i) * Z(j)
             # if you ever want the constant term: add (+0.5*w) to a running scalar
             # but SymbolicHamiltonian doesn't need it for optimization/QAOA.
     return SymbolicHamiltonian(form, backend=backend)
 
 
-def _maxcut_mixer(n, backend=None):
+def _maxcut_mixer(n, mode='x', edges=None, backend=None):
     """
-    Standard (unconstrained) QAOA mixer for Max-Cut:
-      H_M = sum_i X_i
+    QAOA mixer for Max-Cut.
+
+    Options:
+      - mode='x':  transverse-field mixer H_M = sum_i X_i (default)
+      - mode='xy': edge-based XY mixer H_M = sum_{(i,j) in E} (X_i X_j + Y_i Y_j)
+                    Useful on sparse graphs; requires 'edges' list.
     """
+    mode = (mode or 'x').lower()
     form = 0
-    for i in range(n):
-        form += X(i)
-    return SymbolicHamiltonian(form, backend=backend)
+    if mode == 'x':
+        for i in range(n):
+            form += X(i)
+        return SymbolicHamiltonian(form, backend=backend)
+
+    if mode == 'xy':
+        if not edges:
+            # Fallback: complete graph if edges not provided
+            edges = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        for i, j in edges:
+            form += X(i) * X(j) + Y(i) * Y(j)
+        return SymbolicHamiltonian(form, backend=backend)
+
+    raise ValueError("mixer must be one of {'x','xy'}.")
 
 def _normalize(W, mode):
     """
@@ -524,7 +546,7 @@ class MaxCut:
     # Hamiltonians
     def hamiltonians(self):
         """
-        Constructs the phaser and mixer Hamiltonians for the MCP.
+        Constructs the phaser and mixer Hamiltonians for the Max-Cut problem.
 
         Returns:
             tuple: A tuple containing the phaser and mixer Hamiltonians.
