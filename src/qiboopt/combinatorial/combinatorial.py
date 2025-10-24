@@ -2,16 +2,13 @@
 Various combinatorial optimisation applications that are commonly formulated as QUBO problems.
 """
 
-import numpy as np
 import networkx as nx
+import numpy as np
 from qibo import gates
 from qibo.backends import _check_backend
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models.circuit import Circuit
 from qibo.symbols import X, Y, Z
-
-from qiboopt.opt_class.opt_class import QUBO
-
 
 from qiboopt.opt_class.opt_class import (
     QUBO,
@@ -341,6 +338,7 @@ class MIS:
     def __str__(self):
         return self.__class__.__name__
 
+
 def _ensure_weight_matrix(g_or_w):
     """
     Accepts either:
@@ -385,7 +383,9 @@ def _edge_list_from_W(W, tol=1e-12):
                 edges.append((i, j))
     return edges
 
+
 # Hamiltonian Builders
+
 
 def _maxcut_phaser(weight_matrix, backend=None, drop_constant=True):
     """
@@ -413,7 +413,7 @@ def _maxcut_phaser(weight_matrix, backend=None, drop_constant=True):
     return SymbolicHamiltonian(form, backend=backend)
 
 
-def _maxcut_mixer(n, mode='x', edges=None, backend=None):
+def _maxcut_mixer(n, mode="x", edges=None, backend=None):
     """
     QAOA mixer for Max-Cut.
 
@@ -422,14 +422,14 @@ def _maxcut_mixer(n, mode='x', edges=None, backend=None):
       - mode='xy': edge-based XY mixer H_M = sum_{(i,j) in E} (X_i X_j + Y_i Y_j)
                     Useful on sparse graphs; requires 'edges' list.
     """
-    mode = (mode or 'x').lower()
+    mode = (mode or "x").lower()
     form = 0
-    if mode == 'x':
+    if mode == "x":
         for i in range(n):
             form += X(i)
         return SymbolicHamiltonian(form, backend=backend)
 
-    if mode == 'xy':
+    if mode == "xy":
         if not edges:
             # Fallback: complete graph if edges not provided
             edges = [(i, j) for i in range(n) for j in range(i + 1, n)]
@@ -439,42 +439,44 @@ def _maxcut_mixer(n, mode='x', edges=None, backend=None):
 
     raise ValueError("mixer must be one of {'x','xy'}.")
 
+
 def _normalize(W, mode):
     """
     Normalizes W and returns (W_scaled, scale_factor c).
 
     mode:
-      - 'none':   no scaling (c = 1). 
+      - 'none':   no scaling (c = 1).
                 Use when you care about true weights and you're tuning QAOA angles per-instance.
 
-      - 'maxdeg': divide by c = max_i sum_j |W_ij|. 
+      - 'maxdeg': divide by c = max_i sum_j |W_ij|.
                 Good default for batches of graphs with varying degrees/weight
                 keeps each qubit's local scale ~O(1), so one γ-range works across instances.
 
-      - 'sum':    divide by c = sum_{i<j} |W_ij|. 
-                Use for *cross-size/density comparisons* (energy per unit weight) 
+      - 'sum':    divide by c = sum_{i<j} |W_ij|.
+                Use for *cross-size/density comparisons* (energy per unit weight)
                 or to improve numeric conditioning when weights are very large.
 
     Note: Scaling by positive c does NOT change the argmax cut. It only rescales energies
     (and thus the effective QAOA angle γ).
     """
-    mode = (mode or 'none').lower()
-    if mode == 'none':
+    mode = (mode or "none").lower()
+    if mode == "none":
         return W.copy(), 1.0
 
-    if mode == 'maxdeg':
+    if mode == "maxdeg":
         c = np.max(np.sum(np.abs(W), axis=1))
         if c == 0:
             c = 1.0
         return W / c, c
 
-    if mode == 'sum':
+    if mode == "sum":
         c = np.sum(np.abs(np.triu(W, 1)))
         if c == 0:
             c = 1.0
         return W / c, c
 
     raise ValueError("normalize must be one of {'none','maxdeg','sum'}.")
+
 
 class MaxCut:
     """
@@ -526,7 +528,7 @@ class MaxCut:
             # qubo.q_dict has (i,j) -> coefficient, including diagonals for linear terms.
     """
 
-    def __init__(self, graph_or_weights, backend=None, normalize='none', mixer='x'):
+    def __init__(self, graph_or_weights, backend=None, normalize="none", mixer="x"):
         self.backend = _check_backend(backend)
         self.W_raw, self.nodes = _ensure_weight_matrix(graph_or_weights)
         self.n = self.W_raw.shape[0]
@@ -553,7 +555,9 @@ class MaxCut:
         """
         return (
             _maxcut_phaser(self.W, backend=self.backend),
-            _maxcut_mixer(self.n, mode=self.mixer_mode, edges=self._edges, backend=self.backend),
+            _maxcut_mixer(
+                self.n, mode=self.mixer_mode, edges=self._edges, backend=self.backend
+            ),
         )
 
     # Initial states
@@ -575,7 +579,12 @@ class MaxCut:
         elif init == "bitstring":
             if bitstring is None:
                 raise ValueError("Provide 'bitstring' when init='bitstring'.")
-            bits = [int(b) for b in (bitstring.strip() if isinstance(bitstring, str) else bitstring)]
+            bits = [
+                int(b)
+                for b in (
+                    bitstring.strip() if isinstance(bitstring, str) else bitstring
+                )
+            ]
             if len(bits) != self.n:
                 raise ValueError("Bitstring length must equal number of vertices.")
             for i, b in enumerate(bits):
@@ -643,7 +652,10 @@ class MaxCut:
         Returns:
           float: sum_{i<j} W_ij * [bits_i XOR bits_j]
         """
-        x = np.array([int(b) for b in (bits.strip() if isinstance(bits, str) else bits)], dtype=int)
+        x = np.array(
+            [int(b) for b in (bits.strip() if isinstance(bits, str) else bits)],
+            dtype=int,
+        )
         if x.size != self.n:
             raise ValueError("Assignment length must equal number of vertices.")
         Wv = self.W if use_scaled else self.W_raw
