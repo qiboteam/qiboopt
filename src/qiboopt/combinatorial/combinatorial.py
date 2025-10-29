@@ -245,12 +245,40 @@ class TSP:
         """
         Constructs the TSP QUBO object using a penalty method for feasibility.
 
+        The TSP is formulated as:
+
+        .. math::
+
+            \\min \\sum_{u,v,j} d_{u,v} \\, x_{u,j} \\, x_{v,j+1}
+
+        Subject to constraints:
+
+        .. math::
+
+            \\sum_j x_{v,j} = 1 \\quad \forall v \\
+            \\sum_v x_{v,j} = 1 \\quad \forall j
+
+        The penalty method converts this to an unconstrained QUBO:
+
+        .. math::
+
+            f(x) = \text{objective}(x) + \\lambda
+            \\left[
+                \\sum_v \\left(\\sum_j x_{v,j} - 1\right)^2 +
+                \\sum_j \\left(\\sum_v x_{v,j} - 1\right)^2
+            \right]
+
         Args:
-            penalty (float): The penalty parameter for constraint violations.
+            penalty (float): The penalty parameter for constraint violations. It should be large enough to enforce
+                             constraints but not so large as to cause numerical issues.
 
         Returns:
             QUBO: A QUBO object for the TSP with penalties applied.
+        Raises:
+            ValueError: If penalty is negative.
         """
+        if penalty < 0:
+            raise ValueError(f"Penalty must be positive, got {penalty}")
         q_dict = {
             (
                 self.two_to_one[(u, j)],

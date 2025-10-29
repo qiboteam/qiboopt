@@ -375,6 +375,16 @@ def test_tsp_penalty(distance, penalty):
         ), f"penalty test: Expected {expected_value} but got {value} for key {key}."
 
 
+@pytest.mark.parametrize(
+    "distance, penalty", [(np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]]), -1)]
+)
+def test_tsp_negative_penalty(distance, penalty):
+    """Test negative penalty value"""
+    tsp = TSP(distance)
+    with pytest.raises(ValueError):
+        qp = tsp.penalty_method(penalty)
+
+
 def qaoa_function_of_layer(backend, layer):
     """
     This is a function to study the impact of the number of layers on QAOA, it takes
