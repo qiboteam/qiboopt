@@ -2,6 +2,8 @@ import networkx as nx
 import numpy as np
 import pytest
 from qibo.hamiltonians import SymbolicHamiltonian
+from qibo.models import QAOA
+from test_models_variational import assert_regression_fixture
 
 from qiboopt.combinatorial.combinatorial import (
     MIS,
@@ -15,10 +17,15 @@ from qiboopt.opt_class.opt_class import QUBO, LinearProblem
 
 def test__calculate_two_to_one():
     num_cities = 3
-    result = _calculate_two_to_one(num_cities)
-    expected = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8]])
-    assert np.array_equal(
-        result, expected
+    result, _ = _calculate_two_to_one(num_cities)
+    expected_array = np.array([[0, 1, 2], [3, 4, 5], [6, 7, 8]])
+    expected_dict = {
+        (i, j): int(expected_array[i, j])
+        for i in range(num_cities)
+        for j in range(num_cities)
+    }
+    assert (
+        expected_dict == result
     ), "calculate_two_to_one did not return the expected result"
 
 
@@ -318,147 +325,104 @@ def test_column_constraints(setup_tsp):
     ), f"Expected {expected_col_constraints}, but got {qp.Qdict}"
 
 
-def test_tsp_penalty():
+@pytest.mark.parametrize(
+    "distance, penalty",
+    [
+        (np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]]), 10),
+        (
+            np.array(
+                [[0, 10, 15, 20], [10, 0, 35, 25], [15, 35, 0, 30], [20, 25, 30, 0]]
+            ),
+            0,
+        ),
+        (
+            np.array(
+                [[0, 10, 15, 20], [10, 0, 35, 25], [15, 35, 0, 30], [20, 25, 30, 0]]
+            ),
+            1000.0,
+        ),
+        (np.array([[0, 10], [10, 0]]), 1.0),
+        (np.array([0]), 1),
+    ],
+)
+def test_tsp_penalty(distance, penalty):
+    tsp = TSP(distance)
+    qp = tsp.penalty_method(penalty)
+    two_to_one, one_to_two = _calculate_two_to_one(tsp.num_cities)
+    assert isinstance(qp, QUBO), "TSP.penalty_method() did not return a QUBO."
+    assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
+    for key, value in qp.Qdict.items():
+        # key is a pair of indices of the QUBO, we have to get the corresponding city.
+        origin, origin_slot = one_to_two[
+            key[0]
+        ]  # recall the two indices are of the form of (city, slot)
+        destination, destination_slot = one_to_two[key[1]]
+        if (
+            origin != destination
+            and (destination_slot - origin_slot) % tsp.num_cities == 1
+        ):
+            expected_value = distance[origin][destination]
+        elif origin == destination and origin_slot == destination_slot:
+            expected_value = -2 * penalty
+        elif (origin == destination and origin_slot != destination_slot) or (
+            origin != destination and origin_slot == destination_slot
+        ):
+            expected_value = penalty
+        else:
+            expected_value = 0.0
+        assert (
+            value == expected_value
+        ), f"penalty test: Expected {expected_value} but got {value} for key {key}."
+
+
+@pytest.mark.parametrize(
+    "distance, penalty", [(np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]]), -1)]
+)
+def test_tsp_negative_penalty(distance, penalty):
+    """Test negative penalty value"""
+    tsp = TSP(distance)
+    with pytest.raises(ValueError):
+        qp = tsp.penalty_method(penalty)
+
+
+def qaoa_function_of_layer(backend, layer):
+    """
+    This is a function to study the impact of the number of layers on QAOA, it takes
+    in the number of layers and compute the distance of the mode of the histogram obtained
+    from QAOA
+    """
+    num_cities = 3
     distance_matrix = np.array([[0, 0.9, 0.8], [0.4, 0, 0.1], [0, 0.7, 0]])
-    tsp = TSP(distance_matrix)
-    qp = tsp.penalty_method(10)
-    expected_q_dict = {
-        (0, 4): 0.9,
-        (1, 5): 0.9,
-        (2, 3): 0.9,
-        (0, 7): 0.8,
-        (1, 8): 0.8,
-        (2, 6): 0.8,
-        (3, 1): 0.4,
-        (4, 2): 0.4,
-        (5, 0): 0.4,
-        (3, 7): 0.1,
-        (4, 8): 0.1,
-        (5, 6): 0.1,
-        (6, 1): 0.0,
-        (7, 2): 0.0,
-        (8, 0): 0.0,
-        (6, 4): 0.7,
-        (7, 5): 0.7,
-        (8, 3): 0.7,
-        (0, 0): -20,
-        (0, 1): 10,
-        (0, 2): 10,
-        (0, 3): 10,
-        (0, 5): 0,
-        (0, 6): 10,
-        (0, 8): 0,
-        (1, 0): 10,
-        (1, 1): -20,
-        (1, 2): 10,
-        (1, 3): 0,
-        (1, 4): 10,
-        (1, 6): 0,
-        (1, 7): 10,
-        (2, 0): 10,
-        (2, 1): 10,
-        (2, 2): -20,
-        (2, 4): 0,
-        (2, 5): 10,
-        (2, 7): 0,
-        (2, 8): 10,
-        (3, 0): 10,
-        (3, 2): 0,
-        (3, 3): -20,
-        (3, 4): 10,
-        (3, 5): 10,
-        (3, 6): 10,
-        (3, 8): 0,
-        (4, 0): 0,
-        (4, 1): 10,
-        (4, 3): 10,
-        (4, 4): -20,
-        (4, 5): 10,
-        (4, 6): 0,
-        (4, 7): 10,
-        (5, 1): 0,
-        (5, 2): 10,
-        (5, 3): 10,
-        (5, 4): 10,
-        (5, 5): -20,
-        (5, 7): 0,
-        (5, 8): 10,
-        (6, 0): 10,
-        (6, 2): 0,
-        (6, 3): 10,
-        (6, 5): 0,
-        (6, 6): -20,
-        (6, 7): 10,
-        (6, 8): 10,
-        (7, 0): 0,
-        (7, 1): 10,
-        (7, 3): 0,
-        (7, 4): 10,
-        (7, 6): 10,
-        (7, 7): -20,
-        (7, 8): 10,
-        (8, 1): 0,
-        (8, 2): 10,
-        (8, 4): 0,
-        (8, 5): 10,
-        (8, 6): 10,
-        (8, 7): 10,
-        (8, 8): -20,
-    }
-    assert (
-        qp.Qdict == expected_q_dict
-    ), f"Expected {expected_q_dict}, but got {qp.Qdict}"
+    # there are two possible cycles, one with distance 1, one with distance 1.9
+    distance_matrix = distance_matrix.round(1)
+
+    small_tsp = TSP(distance_matrix, backend=backend)
+    initial_state = small_tsp.prepare_initial_state([i for i in range(num_cities)])
+    obj_hamil, mixer = small_tsp.hamiltonians()
+    qaoa = QAOA(obj_hamil, mixer=mixer)
+    initial_state = backend.cast(initial_state, copy=True)
+    best_energy, final_parameters, extra = qaoa.minimize(
+        initial_p=[0.1 for i in range(layer)],
+        initial_state=initial_state,
+        method="BFGS",
+        options={"maxiter": 1},
+    )
+    qaoa.set_parameters(final_parameters)
+    return qaoa.execute(initial_state)
 
 
-# TODO: Check the code and/or test? Seems to conflict with the other tests above?
-# TODO: Can simplify this test using pytest.parametrize? Or merge with the above tests?
-# def test_tsp_penalty_method():
-#     """Test TSP.penalty_method"""
-#     # Setup test parameters
-#     distance_matrix = np.array([
-#         [0, 10, 15, 20],
-#         [10, 0, 35, 25],
-#         [15, 35, 0, 30],
-#         [20, 25, 30, 0],
-#     ])
-#     num_cities = distance_matrix.shape[0]
-#     # two_to_one = lambda u, j: u * num_cities + j  # Example two_to_one mapping
-#     tsp = TSP(distance_matrix)  # Assuming TSP class exists
-#
-#     # Test 1: Basic functionality with zero penalty
-#     penalty = 0.0
-#     qp = tsp.penalty_method(penalty)
-#     assert isinstance(qp, QUBO), "TSP.penalty_method() did not return a QUBO."
-#     assert qp.Qdict, "QUBO dictionary from TSP.penalty_method() is empty."
-#     for key, value in qp.Qdict.items():
-#         expected_value = distance_matrix[key[0] // num_cities][key[1] // num_cities]
-#         assert (
-#             value == expected_value
-#         ), f"Zero penalty test: Expected {expected_value} but got {value} for key {key}."
-#
-#     # Test 2: High penalty
-#     penalty = 1000.0
-#     qp = tsp.penalty_method(penalty)
-#     for key, value in qp.Qdict.items():
-#         assert (
-#             abs(value) >= 1000
-#         ), f"High penalty test: Value {value} is less than expected penalty."
-#
-#     # Test 3: Single city (edge case)
-#     tsp.num_cities = 1
-#     tsp.distance_matrix = np.zeros((1, 1))
-#     qp = tsp.penalty_method(penalty=1.0)
-#     assert (
-#         not qp.Qdict
-#     ), "Single city test: QUBO dictionary should be empty for a single city."
-#
-#     # Test 4: Two cities (small problem)
-#     tsp.num_cities = 2
-#     tsp.distance_matrix = [[0, 10], [10, 0]]
-#     qp = tsp.penalty_method(penalty=1.0)
-#     assert (
-#         qp.Qdict
-#     ), "Two cities test: QUBO dictionary should not be empty for two cities."
+@pytest.mark.parametrize("nlayers", [2, 4])
+def test_tsp(backend, nlayers):
+    if nlayers == 4 and backend.platform in ("cupy", "cuquantum"):
+        pytest.skip("Failing for cupy and cuquantum.")
+    final_state = backend.to_numpy(qaoa_function_of_layer(backend, nlayers))
+    atol = 4e-5 if backend.platform in ("cupy", "cuquantum") else 1e-5
+    assert_regression_fixture(
+        backend, final_state.real, f"tsp_layer{nlayers}_real.out", rtol=1e-3, atol=atol
+    )
+    assert_regression_fixture(
+        backend, final_state.imag, f"tsp_layer{nlayers}_imag.out", rtol=1e-3, atol=atol
+    )
 
 
 def test_mis_class():

@@ -6,7 +6,12 @@ from qibo.noise import DepolarizingError, NoiseModel
 from qibo.optimizers import optimize
 from qibo.quantum_info import infidelity
 
-from qiboopt.opt_class.opt_class import QUBO, LinearProblem
+from qiboopt.opt_class.opt_class import (
+    QUBO,
+    LinearProblem,
+    variable_dict_to_ind_dict,
+    variable_to_ind,
+)
 
 
 def test_initialization():
@@ -42,6 +47,7 @@ def test_add_multiplication_operators():
         ),
         ({(0, 0): 2.0, (0, 1): 1.0, (1, 1): -2.0}, {3: 1.0, 4: 0.82, 5: 0.23}),
         (15, 13),
+        ({0: 1, 1: 2}, {(0, "x"): 2}),
     ],
 )
 def test_invalid_input_qubo(h, J):
@@ -570,3 +576,11 @@ def test_linear_square():
     expected_offset = 61
     assert Qdict == expected_Qdict
     assert offset == expected_offset
+
+
+def test_variable_dict_to_ind():
+    variable_dict = {("x1", "x2"): 1.5, ("x2", "x3"): -0.5, "x3": 2.0}
+    var_to_idx = {"x1": 0, "x2": 1, "x3": 2}
+    ind_dict = variable_dict_to_ind_dict(variable_dict, var_to_idx)
+    expected = {(0, 1): 1.5, (1, 2): -0.5, 2: 2.0}
+    assert expected == ind_dict

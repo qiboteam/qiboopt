@@ -109,6 +109,8 @@ class QUBO:
             J = args[1]
             if not all(isinstance(k, int) for k in h.keys()):
                 raise TypeError("All keys in the dictionary must be integers.")
+            if not all(isinstance(u, int) and isinstance(v, int) for u, v in J.keys()):
+                raise TypeError("All keys in J dictionary must be tuples of integers")
             self.h = h
             self.J = J
             self.Qdict = {(v, v): -2.0 * bias for v, bias in h.items()}
@@ -384,7 +386,7 @@ class QUBO:
 
                 print(best_obj_value)
 
-            ..testoutput
+            ..testoutput::
 
                 0.5
         """
@@ -581,19 +583,9 @@ class QUBO:
         self.n_layers = p
         self.num_betas = len(betas)
 
-        circuit = self.qubo_to_qaoa_circuit(
-            gammas, betas, alphas=alphas, custom_mixer=custom_mixer
-        )
-        if noise_model is not None:
-            circuit = noise_model.apply(circuit)
-
-        n_params = 3 * p if alphas else 2 * p
-
-        # Block packing: [all gammas][all betas][all alphas]
         parameters = list(gammas) + list(betas)
         if alphas is not None:
             parameters += list(alphas)
-
         if regular_loss:
 
             def myloss(parameters):
@@ -621,8 +613,6 @@ class QUBO:
                 )
                 if noise_model is not None:
                     circuit = noise_model.apply(circuit)
-                # print("Regular loss" "s circuit:\n")
-                # print(circuit)
 
                 result = circuit(None, nshots)
                 result_counter = result.frequencies(binary=True)
@@ -660,12 +650,6 @@ class QUBO:
                 )
                 if noise_model is not None:
                     circuit = noise_model.apply(circuit)
-                # print("CVaR loss" "s circuit:\n")
-                # print(circuit)
-                # print(">> Optimisation step:\n")
-                # for data in circuit.raw["queue"]:
-                #     print(data)
-
                 result = backend.execute_circuit(circuit, nshots=nshots)
                 result_counter = result.frequencies(binary=True)
 
@@ -689,20 +673,17 @@ class QUBO:
                 selected_energies = []
 
                 for energy, prob in sorted_energies:
-                    if cumulative_prob + prob > cvar_delta:
+                    if cumulative_prob + prob > delta:
                         # Include only the fraction of the probability needed to reach `cvar_delta`
-                        excess_prob = cvar_delta - cumulative_prob
+                        excess_prob = delta - cumulative_prob
                         selected_energies.append((energy, excess_prob))
-                        cumulative_prob = cvar_delta
+                        cumulative_prob = delta
                         break
                     selected_energies.append((energy, prob))
                     cumulative_prob += prob
 
                 # Compute CVaR as weighted average of selected energies
-                cvar = (
-                    sum(energy * prob for energy, prob in selected_energies)
-                    / cvar_delta
-                )
+                cvar = sum(energy * prob for energy, prob in selected_energies) / delta
                 return cvar
 
         best, params, extra = optimize(
@@ -897,3 +878,58 @@ class LinearProblem:
             for j in range(num_cols)
         }
         return QUBO(offset, Qdict)
+
+
+def variable_to_ind(variable_list):
+    """
+    given a list of variable, returns a dictionary from the variables to integers and also
+    a dictionary to map the integer to the variables
+    Args: a list of objects, typically strings
+    returns:
+    Two dictionaries, one map from the variable to the indices and it performs the reverse
+    Example:
+    .. testcode::
+       variables = ["x1", "x2", "x3"]
+       v2i, i2v = variable_to_ind(variables)
+
+        print(v2i)
+        # >>> {'x1': 0, 'x2': 1, 'x3': 2}
+        print(i2v)
+        # >>> {0: 'x1', 1: 'x2', 2: 'x3'}
+    """
+    var_to_idx = {var: i for i, var in enumerate(variable_list)}
+    idx_to_var = {i: var for i, var in enumerate(variable_list)}
+    return var_to_idx, idx_to_var
+
+
+def variable_dict_to_ind_dict(variable_dict, var_to_idx):
+    """
+    This functions take in a dictionary that maps from (variable, variable) to float
+    or variable to float convert the dictionary key to the corresponding indices
+    Args:
+        variable_dict: dictionary
+        var_to_idx: a mapping from the variable to an index
+    Returns:
+        a dictionary that maps from indices to
+    Example:
+    .. testcode::
+    var_to_idx = {'x1': 0, 'x2': 1, 'x3': 2}
+
+    variable_dict = {
+        ('x1', 'x2'): 1.5,
+        ('x2', 'x3'): -0.5,
+        'x3': 2.0
+    }
+
+    ind_dict = variable_dict_to_ind_dict(variable_dict, var_to_idx)
+    print(ind_dict)
+    # >>> {(0, 1): 1.5, (1, 2): -0.5, 2: 2.0}
+    """
+    ind_dict = {}
+    for key, value in variable_dict.items():
+        if isinstance(key, tuple):
+            ind_key = tuple(var_to_idx[var] for var in key)
+        else:
+            ind_key = var_to_idx[key]
+        ind_dict[ind_key] = value
+    return ind_dict
