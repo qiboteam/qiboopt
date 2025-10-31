@@ -133,7 +133,7 @@ class TSP:
             from qiboopt.combinatorial.combinatorial import TSP
             import numpy as np
             from collections import defaultdict
-            from qibo import gates
+            from qibo import Circuit, gates
             from qibo.models import QAOA
             from qibo.result import CircuitResult
 
