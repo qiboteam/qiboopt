@@ -382,11 +382,11 @@ class QUBO:
 
                 [0 1]
 
-            ..testcode::
+            .. testcode::
 
                 print(best_obj_value)
 
-            ..testoutput::
+            .. testoutput::
 
                 0.5
         """
