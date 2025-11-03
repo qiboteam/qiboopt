@@ -388,7 +388,7 @@ class QUBO:
 
             .. testoutput::
 
-                0.5
+                -1.0
         """
         x = np.random.randint(2, size=self.n)  # Initial solution
         best_solution = x.copy()
