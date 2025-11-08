@@ -7,8 +7,14 @@ from test_models_variational import assert_regression_fixture
 
 from qiboopt.combinatorial.combinatorial import (
     MIS,
+    MaxCut,
     TSP,
     _calculate_two_to_one,
+    _maxcut_phaser,
+    _edge_list_from_W,
+    _ensure_weight_matrix,
+    _maxcut_mixer,
+    _normalize,
     _tsp_mixer,
     _tsp_phaser,
 )
@@ -438,3 +444,152 @@ def test_mis_class():
 
     mis_str = str(mis)
     assert mis_str == "MIS", "MIS.__str__ did not return the expected string"
+
+
+def test_maxcut_helper_functions():
+    weights = np.array([[0, 2, 0], [2, 0, 3], [0, 3, 0]], dtype=float)
+    matrix_form, nodes = _ensure_weight_matrix(weights)
+    assert np.array_equal(matrix_form, weights)
+    assert nodes == [0, 1, 2]
+
+    graph = nx.Graph()
+    graph.add_weighted_edges_from([("a", "b", 1.5), ("b", "c", 2.0)])
+    graph_matrix, graph_nodes = _ensure_weight_matrix(graph)
+    idx = {node: i for i, node in enumerate(graph_nodes)}
+    assert pytest.approx(graph_matrix[idx["a"], idx["b"]]) == 1.5
+    assert pytest.approx(graph_matrix[idx["b"], idx["c"]]) == 2.0
+
+    with pytest.raises(ValueError):
+        _ensure_weight_matrix(np.ones((2, 3)))
+    with pytest.raises(ValueError):
+        _ensure_weight_matrix(np.array([[0.0, 1.0], [0.0, 0.0]]))
+    loop_graph = nx.Graph()
+    loop_graph.add_weighted_edges_from([("a", "a", 5.0), ("a", "b", 2.5)])
+    loop_matrix, loop_nodes = _ensure_weight_matrix(loop_graph)
+    loop_idx = {node: i for i, node in enumerate(loop_nodes)}
+    assert loop_matrix[loop_idx["a"], loop_idx["a"]] == 0.0
+    assert pytest.approx(loop_matrix[loop_idx["a"], loop_idx["b"]]) == 2.5
+    with pytest.raises(TypeError):
+        _ensure_weight_matrix(123)
+
+    same, same_scale = _normalize(weights, "none")
+    assert np.array_equal(same, weights) and same_scale == 1.0
+
+    maxdeg_scaled, maxdeg_scale = _normalize(weights, "maxdeg")
+    expected_maxdeg = np.max(np.sum(np.abs(weights), axis=1))
+    assert pytest.approx(maxdeg_scale) == expected_maxdeg
+    assert np.allclose(maxdeg_scaled, weights / maxdeg_scale)
+
+    sum_scaled, sum_scale = _normalize(weights, "sum")
+    expected_sum = np.sum(np.abs(np.triu(weights, 1)))
+    assert pytest.approx(sum_scale) == expected_sum
+    assert np.allclose(sum_scaled, weights / sum_scale)
+
+    zeros = np.zeros((2, 2), dtype=float)
+    zero_maxdeg, zero_maxdeg_scale = _normalize(zeros, "maxdeg")
+    assert zero_maxdeg_scale == pytest.approx(1.0)
+    assert np.array_equal(zero_maxdeg, zeros)
+    zero_sum, zero_sum_scale = _normalize(zeros, "sum")
+    assert zero_sum_scale == pytest.approx(1.0)
+    assert np.array_equal(zero_sum, zeros)
+
+    with pytest.raises(ValueError):
+        _normalize(weights, "invalid")
+
+    edges = _edge_list_from_W(weights)
+    assert set(edges) == {(0, 1), (1, 2)}
+
+
+def test_maxcut_mixer_variants():
+    ham_x = _maxcut_mixer(3, mode="x")
+    assert isinstance(ham_x, SymbolicHamiltonian)
+
+    edges = [(0, 1), (1, 2)]
+    ham_xy = _maxcut_mixer(3, mode="xy", edges=edges)
+    assert isinstance(ham_xy, SymbolicHamiltonian)
+    fallback_xy = _maxcut_mixer(3, mode="xy")
+    assert isinstance(fallback_xy, SymbolicHamiltonian)
+    assert len(fallback_xy.terms) == 6
+
+    with pytest.raises(ValueError):
+        _maxcut_mixer(2, mode="z")
+
+
+def test_maxcut_prepare_initial_state_variants(monkeypatch):
+    weights = np.zeros((2, 2), dtype=float)
+    mc = MaxCut(weights)
+
+    plus_state = mc.prepare_initial_state()
+    assert np.allclose(plus_state, np.full(4, 0.5))
+
+    basis_state = mc.prepare_initial_state(init="bitstring", bitstring="10")
+    assert np.array_equal(basis_state, np.array([0, 0, 1, 0], dtype=complex))
+
+    with pytest.raises(ValueError):
+        mc.prepare_initial_state(init="bitstring")
+    with pytest.raises(ValueError):
+        mc.prepare_initial_state(init="bitstring", bitstring="1")
+
+    class _DeterministicRNG:
+        def integers(self, low, high=None, size=None):
+            return np.array([1, 0], dtype=int)
+
+    monkeypatch.setattr(
+        "qiboopt.combinatorial.combinatorial.np.random.default_rng",
+        lambda: _DeterministicRNG(),
+    )
+    random_state = mc.prepare_initial_state(init="random")
+    assert np.array_equal(random_state, basis_state)
+
+    with pytest.raises(ValueError):
+        mc.prepare_initial_state(init="invalid")
+
+
+def test_maxcut_qubo_and_cut_metrics():
+    weights = np.array([[0, 1, 2], [1, 0, 3], [2, 3, 0]], dtype=float)
+    mc = MaxCut(weights, normalize="maxdeg", mixer="x")
+
+    obj_h, mix_h = mc.hamiltonians()
+    assert isinstance(obj_h, SymbolicHamiltonian)
+    assert isinstance(mix_h, SymbolicHamiltonian)
+
+    qubo_max = mc.to_qubo(maximize=True, use_scaled=False)
+    qubo_min = mc.to_qubo(maximize=False, use_scaled=False)
+
+    assert qubo_max.Qdict[(0, 0)] == pytest.approx(-3.0)
+    assert qubo_max.Qdict[(0, 1)] == pytest.approx(2.0)
+    assert qubo_min.Qdict[(0, 1)] == pytest.approx(-2.0)
+
+    qubo_scaled = mc.to_qubo(maximize=True, use_scaled=True)
+    scale = np.max(np.sum(np.abs(weights), axis=1))
+    assert qubo_scaled.Qdict[(0, 1)] == pytest.approx(qubo_max.Qdict[(0, 1)] / scale)
+
+    bitstring = "010"
+    cut_true = mc.cut_value(bitstring)
+    cut_scaled = mc.cut_value(bitstring, use_scaled=True)
+    assert cut_true == pytest.approx(4.0)
+    assert cut_scaled == pytest.approx(cut_true / scale)
+
+    S, Sp = mc.partition_from_bits(bitstring)
+    assert S == {0, 2} and Sp == {1}
+
+    with pytest.raises(ValueError):
+        mc.cut_value("01")
+    with pytest.raises(ValueError):
+        mc.partition_from_bits("01")
+
+    assert mc.rescale_energy(0.5) == pytest.approx(mc.energy_scale * 0.5)
+    assert str(mc) == "MaxCut(n=3, normalize='maxdeg', mixer='x')"
+
+    zero_weights = np.array([[0, 1, 0], [1, 0, 2], [0, 2, 0]], dtype=float)
+    zero_mc = MaxCut(zero_weights)
+    zero_qubo = zero_mc.to_qubo()
+    assert (0, 2) not in zero_qubo.Qdict
+    assert zero_mc.cut_value("010") == pytest.approx(3.0)
+
+
+def test_maxcut_phaser_skips_zero_weights():
+    weights = np.array([[0, 1, 0], [1, 0, 2], [0, 2, 0]], dtype=float)
+    ham = _maxcut_phaser(weights)
+    assert isinstance(ham, SymbolicHamiltonian)
+    assert len(ham.terms) == 2
