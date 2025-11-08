@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import pytest
 from qibo import Circuit, gates
@@ -95,6 +97,17 @@ def test_tabu_search():
 
     assert len(best_solution) == 2
     assert isinstance(best_obj_value, float)
+
+
+def test_tabu_search_updates_best_solution(monkeypatch):
+    qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
+    monkeypatch.setattr(
+        "qiboopt.opt_class.opt_class.np.random.randint",
+        lambda *args, **kwargs: np.ones(qp.n, dtype=int),
+    )
+    best_solution, best_obj_value = qp.tabu_search(max_iterations=1, tabu_size=1)
+    assert np.array_equal(best_solution, np.array([0, 1]))
+    assert best_obj_value == pytest.approx(1.0)
 
 
 def test_brute_force():
@@ -583,3 +596,51 @@ def test_variable_dict_to_ind():
     ind_dict = variable_dict_to_ind_dict(variable_dict, var_to_idx)
     expected = {(0, 1): 1.5, (1, 2): -0.5, 2: 2.0}
     assert expected == ind_dict
+
+
+def test_construct_symbolic_hamiltonian_matches_qubo():
+    qdict = {(0, 0): 0.25, (0, 1): -0.5, (1, 1): 1.5}
+    qubo = QUBO(0.75, qdict)
+    ham = qubo.construct_symbolic_Hamiltonian_from_QUBO()
+
+    diag = np.diag(ham.matrix).real
+    h, J, constant = qubo.qubo_to_ising()
+    expected = []
+    for bits in itertools.product([0, 1], repeat=qubo.n):
+        spins = [1 if bit else -1 for bit in bits]
+        energy = constant
+        for idx, coeff in h.items():
+            energy += coeff * spins[idx]
+        for (u, v), coeff in J.items():
+            energy += coeff * spins[u] * spins[v]
+        expected.append(energy)
+
+    assert np.allclose(np.sort(diag), np.sort(expected))
+    assert ham.nqubits == qubo.n
+
+
+def test_canonical_q_merges_symmetric_terms():
+    qdict = {(0, 1): 1.0, (1, 0): 0.25, (1, 1): -1.0}
+    qubo = QUBO(0.0, qdict)
+    canonical = qubo.canonical_q()
+
+    assert canonical[(0, 1)] == pytest.approx(1.25)
+    assert canonical[(1, 1)] == pytest.approx(2 * qdict[(1, 1)])
+    assert all(i <= j for i, j in canonical)
+
+
+def test_train_qaoa_requires_layer_information():
+    qubo = QUBO(0.0, {(0, 0): 1.0})
+    with pytest.raises(
+        ValueError,
+        match="Either p or gammas must be provided to define the number of layers\\.",
+    ):
+        qubo.train_QAOA(betas=[0.1])
+
+
+def test_variable_to_ind_round_trip():
+    variables = ["x1", "x2", "x3"]
+    var_to_idx, idx_to_var = variable_to_ind(variables)
+
+    assert var_to_idx == {"x1": 0, "x2": 1, "x3": 2}
+    assert idx_to_var == {0: "x1", 1: "x2", 2: "x3"}
