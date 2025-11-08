@@ -43,9 +43,12 @@ def _should_skip(code: str) -> bool:
     return False
 
 
-@pytest.mark.parametrize("notebook_rel", [
-    Path("tutorial") / "Max-Cut.ipynb",
-])
+@pytest.mark.parametrize(
+    "notebook_rel",
+    [
+        Path("tutorial") / "Max-Cut.ipynb",
+    ],
+)
 def test_execute_notebook_for_coverage(notebook_rel: Path):
     # Ensure we can import local package without installation
     repo_root = Path(__file__).resolve().parents[1]
@@ -81,4 +84,3 @@ def test_execute_notebook_for_coverage(notebook_rel: Path):
     assert any(
         k in ns for k in ("dist_matrix", "weights", "G")
     ), "Notebook did not appear to run core setup cells"
-
