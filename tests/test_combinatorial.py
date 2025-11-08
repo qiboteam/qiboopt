@@ -7,13 +7,13 @@ from test_models_variational import assert_regression_fixture
 
 from qiboopt.combinatorial.combinatorial import (
     MIS,
-    MaxCut,
     TSP,
+    MaxCut,
     _calculate_two_to_one,
-    _maxcut_phaser,
     _edge_list_from_W,
     _ensure_weight_matrix,
     _maxcut_mixer,
+    _maxcut_phaser,
     _normalize,
     _tsp_mixer,
     _tsp_phaser,
