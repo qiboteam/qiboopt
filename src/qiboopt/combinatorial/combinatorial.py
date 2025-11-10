@@ -255,18 +255,18 @@ class TSP:
 
         .. math::
 
-            \\sum_j x_{v,j} = 1 \\quad \forall v \\
-            \\sum_v x_{v,j} = 1 \\quad \forall j
+            \\sum_j x_{v,j} = 1 \\quad \\forall v \\
+            \\sum_v x_{v,j} = 1 \\quad \\forall j
 
         The penalty method converts this to an unconstrained QUBO:
 
         .. math::
 
-            f(x) = \text{objective}(x) + \\lambda
+            f(x) = \\text{objective}(x) + \\lambda
             \\left[
-                \\sum_v \\left(\\sum_j x_{v,j} - 1\right)^2 +
-                \\sum_j \\left(\\sum_v x_{v,j} - 1\right)^2
-            \right]
+                \\sum_v \\left(\\sum_j x_{v,j} - 1\\right)^2 +
+                \\sum_j \\left(\\sum_v x_{v,j} - 1\\right)^2
+            \\right]
 
         Args:
             penalty (float): The penalty parameter for constraint violations. It should be large enough to enforce
