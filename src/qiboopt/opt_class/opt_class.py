@@ -931,5 +931,6 @@ def variable_dict_to_ind_dict(variable_dict, var_to_idx):
             ind_key = var_to_idx[key]
         elif isinstance(key, tuple):
             ind_key = tuple(var_to_idx[var] for var in key)
-        ind_dict[ind_key] = value
+        if ind_key:
+            ind_dict[ind_key] = value
     return ind_dict
