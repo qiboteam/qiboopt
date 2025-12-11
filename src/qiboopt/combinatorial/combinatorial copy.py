@@ -9,7 +9,7 @@ from qibo.backends import _check_backend
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models import QAOA
 from qibo.models.circuit import Circuit
-from qibo.solvers import get_solver
+from qibo.solvers import get_solver  # MA: solvers for multi-angle layer applications
 from qibo.symbols import X, Y, Z
 
 from qiboopt.opt_class.opt_class import (
@@ -694,33 +694,31 @@ class MaxCut:
 
 class CombinatorialQAOA:
     """
-    Lightweight helper around :class:`qibo.models.QAOA` for the problems defined in this
-    module (or any object exposing ``hamiltonians()`` and, optionally,
-    ``prepare_initial_state``). It also exposes optional multi-angle (MA) controls so
-    each layer can carry different rotation parameters per Hamiltonian block.
+    Helper around :class:`qibo.models.QAOA` that stays problem-aware (it can call
+    ``problem.prepare_initial_state``) and optionally supports multi-angle (MA)
+    schedules. This version mirrors the key guards present in qibo's own QAOA:
+
+    - validates cost/mixer type and qubit count
+    - supplies a default transverse-field mixer when none is provided
+    - enforces an even, 2p-parameter vector for standard QAOA paths
+    - falls back to |+>^n when no initial-state factory is available
+    - keeps callback/solver behaviour provided by the underlying qibo QAOA
 
     Args:
         problem: Problem instance (e.g., :class:`TSP`, :class:`MaxCut`) that provides
-            the Hamiltonians and, if needed, an initial-state factory.
-        layers (int): Number of QAOA layers (controls the default initial parameter
-            vector length). Must be positive. [Default 1]
-        cost_hamiltonian: Optional override of the cost Hamiltonian returned by the
-            problem.  [Default None]
-        mixer_hamiltonian: Optional override of the mixer Hamiltonian. [Default None]
-        qaoa_kwargs (dict): Extra keyword arguments passed directly to
-            :class:`qibo.models.QAOA`. [Default None]
-        multi_angle (bool): Enable MA mode using dedicated cost/mixer operator lists. 
-                            [Default False]
-        ma_cost_operators (list): Ordered cost Hamiltonians used inside MA layers. 
-                            [Default None]
-        ma_mixer_operators (list): Ordered mixer Hamiltonians used inside MA layers. 
-                            [Default None]
-        ma_parameter_layout (dict): Optional per-layer counts for MA angles. 
-                            [Default None]
-        ma_default_angle (float): Default initial value for every MA angle. 
-                            [Default None]
-        ma_solver (str): Solver backend used for the MA operator exponentials. 
-                            [Default "exp"]
+            Hamiltonians and, optionally, ``prepare_initial_state``.
+        layers (int): Number of QAOA layers (p). Must be positive. [Default 1]
+        cost_hamiltonian: Optional override of the cost Hamiltonian. [Default None]
+        mixer_hamiltonian: Optional override of the mixer Hamiltonian. If ``None``,
+            a transverse-field X mixer is built to match ``cost_hamiltonian``. [Default None]
+        qaoa_kwargs (dict): Extra kwargs forwarded to :class:`qibo.models.QAOA`
+            (e.g., ``solver``, ``callbacks``, ``accelerators``). [Default None]
+        multi_angle (bool): Enable MA mode using dedicated cost/mixer operator lists. [Default False]
+        ma_cost_operators (list): Ordered cost Hamiltonians used inside MA layers.
+        ma_mixer_operators (list): Ordered mixer Hamiltonians used inside MA layers.
+        ma_parameter_layout (dict): Optional per-layer counts for MA angles.
+        ma_default_angle (float): Default initial value for every MA angle.
+        ma_solver (str): Solver backend used for the MA operator exponentials.
 
     Example:
         >>> mc = MaxCut(W)
@@ -736,46 +734,13 @@ class CombinatorialQAOA:
         cost_hamiltonian=None,
         mixer_hamiltonian=None,
         qaoa_kwargs=None,
-        multi_angle=False,
-        ma_cost_operators=None,
-        ma_mixer_operators=None,
-        ma_parameter_layout=None,
-        ma_default_angle=0.1,
-        ma_solver="exp",
+        multi_angle=False,  # MA: flag to toggle multi-angle behavior
+        ma_cost_operators=None,  # MA: optional per-angle cost Hamiltonians
+        ma_mixer_operators=None,  # MA: optional per-angle mixer Hamiltonians
+        ma_parameter_layout=None,  # MA: per-layer angle counts configuration
+        ma_default_angle=0.1,  # MA: default initialization value for MA angles
+        ma_solver="exp",  # MA: solver used for MA operator exponentials
     ):
-        """
-        Initialize a QAOA helper for combinatorial problems with optional
-        multi-angle parametrization.
-
-        Args:
-            problem (object): Problem exposing ``hamiltonians()`` and optionally
-                ``prepare_initial_state``.
-            layers (int): Number of alternating cost/mixer layers.
-            cost_hamiltonian (qibo.hamiltonians.SymbolicHamiltonian | None): Cost
-                Hamiltonian override; defaults to the problem-provided one.
-            mixer_hamiltonian (qibo.hamiltonians.SymbolicHamiltonian | None): Mixer
-                Hamiltonian override; defaults to the problem-provided one.
-            qaoa_kwargs (dict | None): Extra keyword arguments forwarded to
-                :class:`qibo.models.QAOA`.
-            multi_angle (bool): Enable multi-angle execution with separate operators
-                per block.
-            ma_cost_operators (list[qibo.hamiltonians.SymbolicHamiltonian] | None):
-                Ordered cost operators used in each multi-angle layer.
-            ma_mixer_operators (list[qibo.hamiltonians.SymbolicHamiltonian] | None):
-                Ordered mixer operators used in each multi-angle layer.
-            ma_parameter_layout (dict | None): Optional per-layer operator counts with
-                keys ``cost`` and ``mixer``.
-            ma_default_angle (float): Default initial value used when angles are not
-                provided.
-            ma_solver (str): Solver backend name for exponentiating multi-angle
-                operators.
-
-        Returns:
-            None
-        Multi-angle:
-            Supports both modes; multi-angle features activate when
-            ``multi_angle`` is True.
-        """
         if layers <= 0:
             raise ValueError("layers must be a positive integer.")
         self.problem = problem
@@ -788,75 +753,74 @@ class CombinatorialQAOA:
             mixer_hamiltonian = mixer_hamiltonian or mixer_from_problem
 
         self.cost_hamiltonian = cost_hamiltonian
-        self.mixer_hamiltonian = mixer_hamiltonian
+        self.mixer_hamiltonian = (
+            mixer_hamiltonian or self._build_default_mixer(self.cost_hamiltonian)
+        )
+        self._validate_hamiltonians()
+
         self._qaoa = QAOA(
             self.cost_hamiltonian, mixer=self.mixer_hamiltonian, **qaoa_kwargs
         )
-        self.multi_angle = bool(multi_angle)
-        self.ma_default_angle = ma_default_angle
-        self._ma_cached_parameters = None
-        self._ma_cost_ops = None
-        self._ma_mixer_ops = None
-        self._ma_cost_solvers = None
-        self._ma_mixer_solvers = None
-        self._ma_layout = None
-        self._ma_total_angles = 0
-        if self.multi_angle:
-            self._init_ma_support(
-                solver_name=ma_solver,
-                cost_ops=ma_cost_operators,
-                mixer_ops=ma_mixer_operators,
-                layout_spec=ma_parameter_layout,
+        # Keep direct access to the backend for defaults / plus-state fallbacks.
+        self.backend = self.cost_hamiltonian.backend
+        self.multi_angle = bool(multi_angle)  # MA: remember if MA mode is enabled
+        self.ma_default_angle = ma_default_angle  # MA: store default MA parameter value
+        self._ma_cached_parameters = None  # MA: cache last MA parameter vector
+        self._ma_cost_ops = None  # MA: placeholder for MA cost Hamiltonians
+        self._ma_mixer_ops = None  # MA: placeholder for MA mixer Hamiltonians
+        self._ma_cost_solvers = None  # MA: placeholder for MA cost solvers
+        self._ma_mixer_solvers = None  # MA: placeholder for MA mixer solvers
+        self._ma_layout = None  # MA: per-layer MA operator schedule
+        self._ma_total_angles = 0  # MA: track MA parameter vector length
+        if self.multi_angle:  # MA: configure MA helpers only when requested
+            self._init_ma_support(  # MA: bootstrap MA operator sequences and solvers
+                solver_name=ma_solver,  # MA: pass solver choice to helper
+                cost_ops=ma_cost_operators,  # MA: provide custom cost operators
+                mixer_ops=ma_mixer_operators,  # MA: provide custom mixer operators
+                layout_spec=ma_parameter_layout,  # MA: optional layout overrides
             )
 
     @property
     def model(self):
-        """
-        Expose the underlying :class:`qibo.models.QAOA` instance.
-
-        Returns:
-            qibo.models.QAOA: Configured model instance.
-        Multi-angle:
-            No; available in both modes.
-        """
+        """Expose the underlying :class:`qibo.models.QAOA` instance."""
         return self._qaoa
 
-    def _prepare_state(self, state_kwargs=None):
-        """
-        Prepare an initial state using the problem's factory.
+    def _build_default_mixer(self, cost_hamiltonian):
+        """Create a transverse-field X mixer matching the cost Hamiltonian backend."""
+        from qibo import hamiltonians as qham
 
-        Args:
-            state_kwargs (dict | None): Keyword arguments forwarded to the problem's
-                ``prepare_initial_state`` method.
+        trotter = isinstance(cost_hamiltonian, SymbolicHamiltonian)
+        return qham.X(
+            cost_hamiltonian.nqubits,
+            dense=not trotter,
+            backend=cost_hamiltonian.backend,
+        )
 
-        Returns:
-            np.ndarray: Prepared initial state.
-        Multi-angle:
-            No; shared helper for both modes.
-        """
-        if not hasattr(self.problem, "prepare_initial_state"):
-            raise ValueError(
-                "Problem does not define 'prepare_initial_state'; please supply 'initial_state' explicitly."
+    def _validate_hamiltonians(self):
+        """Ensure cost and mixer share type and qubit count, mirroring qibo.QAOA guards."""
+        if type(self.mixer_hamiltonian) != type(self.cost_hamiltonian):
+            raise TypeError(
+                f"Given Hamiltonian is of type {type(self.cost_hamiltonian)} "
+                f"while mixer is of type {type(self.mixer_hamiltonian)}."
             )
-        kwargs = state_kwargs or {}
-        return self.problem.prepare_initial_state(**kwargs)
+        if self.mixer_hamiltonian.nqubits != self.cost_hamiltonian.nqubits:
+            raise ValueError(
+                f"Given Hamiltonian acts on {self.cost_hamiltonian.nqubits} qubits "
+                f"while mixer acts on {self.mixer_hamiltonian.nqubits}."
+            )
+
+    def _prepare_state(self, state_kwargs=None):
+        """Return initial state from problem factory when available, else |+>^n."""
+        if hasattr(self.problem, "prepare_initial_state"):
+            kwargs = state_kwargs or {}
+            return self.problem.prepare_initial_state(**kwargs)
+        # Fallback to uniform superposition
+        return self.backend.plus_state(self.cost_hamiltonian.nqubits)
 
     def _default_angles(self):
-        """
-        Build a default parameter vector for optimization.
-
-        Args:
-            None
-
-        Returns:
-            list[float]: Default angles sized for the active parameterization.
-        Multi-angle:
-            Returns multi-angle defaults when enabled; otherwise returns one angle
-            per layer.
-        """
-        if self.multi_angle:
-            return self._ma_default_angles()
-        return [0.1] * self.layers
+        if self.multi_angle:  # MA: switch to MA-specific initialization when enabled
+            return self._ma_default_angles()  # MA: use MA layout-driven defaults
+        return [0.1] * (2 * self.layers)  # standard QAOA needs 2p angles
 
     def minimize(
         self,
@@ -871,34 +835,34 @@ class CombinatorialQAOA:
         Optimize the QAOA parameters for the provided problem.
 
         Args:
-            initial_angles (list[float] | np.ndarray | dict | None): Initial parameter
-                vector; accepts flattened angles or per-block dictionaries in
-                multi-angle mode.
-            initial_state (np.ndarray | None): Optional state vector to start the
-                algorithm.
-            state_kwargs (dict | None): Keyword arguments forwarded to the problem's
-                ``prepare_initial_state`` when ``initial_state`` is not supplied.
-            method (str): Classical optimizer passed to :func:`QAOA.minimize` or the
-                multi-angle optimizer.
-            **minimize_kwargs: Additional keyword arguments forwarded to the selected
-                optimizer.
+            initial_angles (list/np.ndarray): Initial parameter vector for QAOA. If
+                omitted, a constant vector of length ``layers`` filled with 0.1 is used.
+            initial_state (np.ndarray): Optional state vector to start the algorithm.
+            state_kwargs (dict): Keyword arguments forwarded to the problem's
+                ``prepare_initial_state`` method when ``initial_state`` is not supplied.
+            method (str): Classical optimizer passed to :func:`QAOA.minimize`.
+            **minimize_kwargs: Additional keyword arguments forwarded to
+                :func:`QAOA.minimize`.
 
         Returns:
-            tuple: ``(best_energy, parameters, info)`` matching the optimizer output.
-        Multi-angle:
-            Uses the multi-angle optimizer when ``multi_angle`` is True; otherwise runs
-            the standard QAOA minimization.
+            tuple: ``(best_energy, parameters, info)`` from :func:`QAOA.minimize`.
         """
-        if self.multi_angle:
-            return self._ma_minimize(
-                initial_angles=initial_angles,
-                initial_state=initial_state,
-                state_kwargs=state_kwargs,
-                method=method,
-                **minimize_kwargs,
+        if self.multi_angle:  # MA: delegate optimization to MA-specific routine
+            return self._ma_minimize(  # MA: run custom MA optimizer
+                initial_angles=initial_angles,  # MA: forward MA parameters
+                initial_state=initial_state,  # MA: forward MA initial state
+                state_kwargs=state_kwargs,  # MA: forward MA state kwargs
+                method=method,  # MA: optimizer choice for MA
+                **minimize_kwargs,  # MA: pass remaining kwargs
             )
 
         angles = initial_angles if initial_angles is not None else self._default_angles()
+        if len(angles) % 2 != 0:
+            raise ValueError("QAOA parameter vector must have even length (γ, β pairs).")
+        if len(angles) != 2 * self.layers:
+            raise ValueError(
+                f"Expected {2 * self.layers} parameters for {self.layers} layers, got {len(angles)}."
+            )
         call_kwargs = dict(minimize_kwargs)
 
         if "initial_state" not in call_kwargs:
@@ -911,300 +875,178 @@ class CombinatorialQAOA:
 
     def execute(self, parameters=None, initial_state=None, state_kwargs=None):
         """
-        Execute the QAOA circuit using stored or provided parameters.
-
+        Execute the QAOA circuit using the stored (or provided) parameters.
+        Used for validating functionality
+        
         Args:
-            parameters (iterable | dict | None): Parameter vector to load before
-                execution; accepts multi-angle dictionaries when enabled.
-            initial_state (np.ndarray | None): State vector to evolve. If omitted, it
-                is constructed via ``state_kwargs`` and the problem instance.
-            state_kwargs (dict | None): Keyword arguments passed to the problem's
-                ``prepare_initial_state`` when ``initial_state`` is omitted.
+            parameters (iterable): Optional parameter vector to load before execution.
+            initial_state (np.ndarray): State vector to evolve. If omitted, it is
+                constructed via ``state_kwargs`` and the problem instance.
+            state_kwargs (dict): Keyword arguments passed to the problem's
+                ``prepare_initial_state`` (only used when ``initial_state`` is omitted).
 
         Returns:
             np.ndarray: Final state prepared by QAOA.
-        Multi-angle:
-            Executes the multi-angle schedule when ``multi_angle`` is True; otherwise
-            runs the standard QAOA circuit.
         """
-        if self.multi_angle:
-            flat_params = (
+        if self.multi_angle:  # MA: run dedicated MA execution path
+            flat_params = (  # MA: ensure dict-like inputs become flat vectors
                 self._ma_flatten_angles(parameters)
                 if parameters is not None
                 else self._ma_cached_parameters
-            )
-            if flat_params is None:
-                flat_params = self._ma_default_angles()
-            state = (
-                initial_state if initial_state is not None else self._prepare_state(state_kwargs)
-            )
-            return self._ma_execute(flat_params, state)
+            )  # MA: reuse cached MA params when none provided
+            if flat_params is None:  # MA: fall back to default MA vector if needed
+                flat_params = self._ma_default_angles()  # MA: default MA parameters
+            state = (  # MA: prepare initial state consistently
+                initial_state
+                if initial_state is not None
+                else self._prepare_state(state_kwargs)
+            )  # MA: reuse single-shot state prep
+            return self._ma_execute(flat_params, state)  # MA: execute MA layers
 
         if parameters is not None:
+            if len(parameters) % 2 != 0:
+                raise ValueError("QAOA parameter vector must have even length (γ, β pairs).")
             self._qaoa.set_parameters(parameters)
 
         state = initial_state if initial_state is not None else self._prepare_state(
             state_kwargs
         )
-        print(f"Parameters: {parameters}")
-        print(f"State: {state}")
+        if self._qaoa.params is None:
+            # Provide a sensible default if execute is called before minimize/set_parameters.
+            self._qaoa.set_parameters(self._default_angles())
         return self._qaoa.execute(state)
 
-    def _init_ma_support(self, *, solver_name, cost_ops, mixer_ops, layout_spec):
-        """
-        Initialize multi-angle operator lists, solvers, and layout.
-
-        Args:
-            solver_name (str): Solver backend name.
-            cost_ops (list[qibo.hamiltonians.SymbolicHamiltonian] | None): Cost
-                operators to include in each block.
-            mixer_ops (list[qibo.hamiltonians.SymbolicHamiltonian] | None): Mixer
-                operators to include in each block.
-            layout_spec (dict | None): Optional per-layer counts for ``cost`` and
-                ``mixer`` operators.
-
-        Returns:
-            None
-        Multi-angle:
-            Yes; only used when ``multi_angle`` is True.
-        """
-        cost_sequence = cost_ops or [self.cost_hamiltonian]
-        mixer_sequence = mixer_ops or [self.mixer_hamiltonian]
-        self._ma_cost_ops = list(cost_sequence)
-        self._ma_mixer_ops = list(mixer_sequence)
-        self._ma_cost_solvers = [
+    def _init_ma_support(self, *, solver_name, cost_ops, mixer_ops, layout_spec):  # MA: initialize MA data
+        cost_sequence = cost_ops or [self.cost_hamiltonian]  # MA: derive cost operator list
+        mixer_sequence = mixer_ops or [self.mixer_hamiltonian]  # MA: derive mixer operator list
+        self._ma_cost_ops = list(cost_sequence)  # MA: store cost operators deterministically
+        self._ma_mixer_ops = list(mixer_sequence)  # MA: store mixer operators deterministically
+        self._ma_cost_solvers = [  # MA: allocate solvers per cost operator
             get_solver(solver_name, 1e-2, ham) for ham in self._ma_cost_ops
-        ]
-        self._ma_mixer_solvers = [
+        ]  # MA: instantiate cost solvers
+        self._ma_mixer_solvers = [  # MA: allocate solvers per mixer operator
             get_solver(solver_name, 1e-2, ham) for ham in self._ma_mixer_ops
-        ]
-        self._ma_layout = self._ma_build_layout(layout_spec)
-        self._ma_total_angles = sum(
+        ]  # MA: instantiate mixer solvers
+        self._ma_layout = self._ma_build_layout(layout_spec)  # MA: build per-layer schedule
+        self._ma_total_angles = sum(  # MA: record total number of MA parameters
             len(block["cost"]) + len(block["mixer"]) for block in self._ma_layout
-        )
-        if self._ma_total_angles == 0:
-            raise ValueError("MA configuration must include at least one operator.")
+        )  # MA: accumulate angles across layers
+        if self._ma_total_angles == 0:  # MA: ensure MA configuration is meaningful
+            raise ValueError("MA configuration must include at least one operator.")  # MA: guard empty MA setup
 
-    def _ma_build_layout(self, layout_spec):
-        """
-        Build the per-layer solver layout for multi-angle execution.
-
-        Args:
-            layout_spec (dict | None): Optional per-layer counts for ``cost`` and
-                ``mixer`` operators.
-
-        Returns:
-            list[dict]: Layout with ``cost`` and ``mixer`` solver lists per layer.
-        Multi-angle:
-            Yes; defines the structure of multi-angle layers.
-        """
-        cost_counts, mixer_counts = self._ma_expand_counts(layout_spec)
-        layout = []
-        for layer in range(self.layers):
-            layout.append(
+    def _ma_build_layout(self, layout_spec):  # MA: translate layout spec into solver schedule
+        cost_counts, mixer_counts = self._ma_expand_counts(layout_spec)  # MA: compute per-layer counts
+        layout = []  # MA: storage for computed layout
+        for layer in range(self.layers):  # MA: iterate over layers to collect solvers
+            layout.append(  # MA: append combined block for this layer
                 {
-                    "cost": self._ma_cost_solvers[: cost_counts[layer]],
-                    "mixer": self._ma_mixer_solvers[: mixer_counts[layer]],
+                    "cost": self._ma_cost_solvers[: cost_counts[layer]],  # MA: select cost solvers for this layer
+                    "mixer": self._ma_mixer_solvers[: mixer_counts[layer]],  # MA: select mixer solvers for this layer
                 }
-            )
-        return layout
+            )  # MA: store combined entry
+        return layout  # MA: return constructed layout
 
-    def _ma_expand_counts(self, layout_spec):
-        """
-        Resolve how many cost and mixer operators each layer should use.
+    def _ma_expand_counts(self, layout_spec):  # MA: resolve layout counts for cost/mixer
+        default_cost = len(self._ma_cost_solvers)  # MA: default uses all cost solvers
+        default_mixer = len(self._ma_mixer_solvers)  # MA: default uses all mixer solvers
+        if layout_spec is None:  # MA: no overrides provided
+            cost_counts = [default_cost] * self.layers  # MA: use full cost set each layer
+            mixer_counts = [default_mixer] * self.layers  # MA: use full mixer set each layer
+        else:  # MA: interpret user-specified layout
+            raw_cost = layout_spec.get("cost", default_cost)  # MA: extract cost override
+            raw_mixer = layout_spec.get("mixer", default_mixer)  # MA: extract mixer override
+            cost_counts = self._ma_sanitize_counts(raw_cost, default_cost)  # MA: normalize cost counts
+            mixer_counts = self._ma_sanitize_counts(raw_mixer, default_mixer)  # MA: normalize mixer counts
+        return cost_counts, mixer_counts  # MA: deliver resolved counts
 
-        Args:
-            layout_spec (dict | None): User-provided overrides for ``cost`` and
-                ``mixer`` counts per layer.
+    def _ma_sanitize_counts(self, counts, max_available):  # MA: clean up per-layer count spec
+        if counts is None:  # MA: treat None as default
+            counts = max_available  # MA: fallback to max operators
+        if isinstance(counts, int):  # MA: scalar specification
+            expanded = [counts] * self.layers  # MA: replicate value per layer
+        else:  # MA: assume iterable specification
+            expanded = list(counts)  # MA: coerce to list for inspection
+            if len(expanded) != self.layers:  # MA: ensure length matches depth
+                raise ValueError("MA layout length must equal number of layers.")  # MA: guard mismatched layout
+        for value in expanded:  # MA: validate individual entries
+            if not (0 <= value <= max_available):  # MA: enforce feasible counts
+                raise ValueError("MA layout entries must be within available operator range.")  # MA: reject invalid counts
+        return expanded  # MA: return normalized list
 
-        Returns:
-            tuple[list[int], list[int]]: Per-layer counts for cost and mixer blocks.
-        Multi-angle:
-            Yes; governs how multi-angle operators repeat across layers.
-        """
-        default_cost = len(self._ma_cost_solvers)
-        default_mixer = len(self._ma_mixer_solvers)
-        if layout_spec is None:
-            cost_counts = [default_cost] * self.layers
-            mixer_counts = [default_mixer] * self.layers
-        else:
-            raw_cost = layout_spec.get("cost", default_cost)
-            raw_mixer = layout_spec.get("mixer", default_mixer)
-            cost_counts = self._ma_sanitize_counts(raw_cost, default_cost)
-            mixer_counts = self._ma_sanitize_counts(raw_mixer, default_mixer)
-        return cost_counts, mixer_counts
+    def _ma_default_angles(self):  # MA: compute default flattened MA parameter vector
+        defaults = []  # MA: container for default parameters
+        for block in self._ma_layout:  # MA: iterate through layer schedule
+            defaults.extend([self.ma_default_angle] * len(block["cost"]))  # MA: append default gammas
+            defaults.extend([self.ma_default_angle] * len(block["mixer"]))  # MA: append default betas
+        return defaults  # MA: deliver default vector
 
-    def _ma_sanitize_counts(self, counts, max_available):
-        """
-        Validate and normalize per-layer operator counts.
+    def _ma_flatten_angles(self, angles):  # MA: coerce structured MA angles into flat list
+        if angles is None:  # MA: use defaults when nothing provided
+            return self._ma_default_angles()  # MA: fallback to default vector
+        if isinstance(angles, dict):  # MA: dict with explicit cost/mixer entries
+            cost_layers = angles.get("cost")  # MA: extract layerwise cost angles
+            mixer_layers = angles.get("mixer")  # MA: extract layerwise mixer angles
+        elif (
+            isinstance(angles, (list, tuple))  # MA: support tuple/list forms
+            and len(angles) == 2  # MA: expect pair (cost, mixer)
+        ):
+            cost_layers, mixer_layers = angles  # MA: unpack tuple/list pair
+        else:  # MA: already flat
+            return list(angles)  # MA: return flat copy unchanged
+        normalized_cost = self._ma_normalize_layer_angles(cost_layers, "cost")  # MA: enforce layer shapes for cost angles
+        normalized_mixer = self._ma_normalize_layer_angles(mixer_layers, "mixer")  # MA: enforce layer shapes for mixer angles
+        flat = []  # MA: accumulator for flattened parameters
+        for layer_index, block in enumerate(self._ma_layout):  # MA: iterate layers
+            flat.extend(normalized_cost[layer_index])  # MA: append this layer's cost angles
+            flat.extend(normalized_mixer[layer_index])  # MA: append this layer's mixer angles
+        return flat  # MA: return flattened vector
 
-        Args:
-            counts (int | Iterable[int] | None): Requested counts per layer.
-            max_available (int): Maximum allowed operators in the sequence.
+    def _ma_normalize_layer_angles(self, layers, kind):  # MA: reshape user MA data per layer
+        target_lengths = [len(block[kind]) for block in self._ma_layout]  # MA: compute required counts
+        if layers is None:  # MA: allocate defaults when missing
+            return [  # MA: build list of defaults per layer
+                [self.ma_default_angle] * count for count in target_lengths  # MA: replicate default value
+            ]  # MA: deliver generated defaults
+        layer_sequence = list(layers)  # MA: force concrete indexing
+        normalized = []  # MA: store normalized layers
+        for idx, count in enumerate(target_lengths):  # MA: iterate expected layer sizes
+            layer_values = layer_sequence[idx] if len(layer_sequence) > idx else None  # MA: pull user data or None
+            if layer_values is None:  # MA: fill missing entries
+                normalized.append([self.ma_default_angle] * count)  # MA: use defaults for missing layer
+            else:  # MA: validate provided data
+                if len(layer_values) != count:  # MA: ensure size matches expectation
+                    raise ValueError("MA angle blocks must match layout specification.")  # MA: guard inconsistent data
+                normalized.append([float(v) for v in layer_values])  # MA: coerce entries to floats
+        return normalized  # MA: deliver normalized angles
 
-        Returns:
-            list[int]: Normalized counts per layer.
-        Multi-angle:
-            Yes; ensures multi-angle layouts stay within available operators.
-        """
-        if counts is None:
-            counts = max_available
-        if isinstance(counts, int):
-            expanded = [counts] * self.layers
-        else:
-            expanded = list(counts)
-            if len(expanded) != self.layers:
-                raise ValueError("MA layout length must equal number of layers.")
-        for value in expanded:
-            if not (0 <= value <= max_available):
-                raise ValueError("MA layout entries must be within available operator range.")
-        return expanded
+    def _ma_execute(self, parameters, initial_state=None):  # MA: execute MA layered evolution
+        backend = self.cost_hamiltonian.backend  # MA: cache backend for casting
+        param_list = [float(p) for p in parameters]  # MA: convert parameters to floats
+        if len(param_list) != self._ma_total_angles:  # MA: ensure parameter length matches layout
+            raise ValueError("Unexpected number of MA parameters.")  # MA: report mismatched vector
+        if initial_state is None:  # MA: default starting state
+            state = backend.plus_state(self.cost_hamiltonian.nqubits)  # MA: |+>^n default
+        else:  # MA: user-provided state
+            state = backend.cast(initial_state, copy=True)  # MA: copy to avoid mutation
+        cursor = 0  # MA: track current parameter index
+        for block in self._ma_layout:  # MA: iterate cost/mixer sequences per layer
+            for solver in block["cost"]:  # MA: apply cost solvers sequentially
+                state = self._ma_apply_solver(solver, param_list[cursor], state)  # MA: evolve by cost operator
+                cursor += 1  # MA: advance cursor after cost
+            for solver in block["mixer"]:  # MA: apply mixer solvers sequentially
+                state = self._ma_apply_solver(solver, param_list[cursor], state)  # MA: evolve by mixer operator
+                cursor += 1  # MA: advance cursor after mixer
+        if cursor != len(param_list):  # MA: confirm full parameter consumption
+            raise ValueError("MA execution consumed unexpected number of parameters.")  # MA: guard against layout drift
+        return self._qaoa.normalize_state(state)  # MA: normalize before returning
 
-    def _ma_default_angles(self):
-        """
-        Build the default flattened parameter vector for multi-angle mode.
-
-        Args:
-            None
-
-        Returns:
-            list[float]: Default angles ordered by the multi-angle layout.
-        Multi-angle:
-            Yes; used only when ``multi_angle`` is True.
-        """
-        defaults = []
-        for block in self._ma_layout:
-            defaults.extend([self.ma_default_angle] * len(block["cost"]))
-            defaults.extend([self.ma_default_angle] * len(block["mixer"]))
-        return defaults
-
-    def _ma_flatten_angles(self, angles):
-        """
-        Convert structured multi-angle parameters into a flat list.
-
-        Args:
-            angles (dict | list | tuple | np.ndarray | None): Angle specification,
-                accepting ``{"cost": [...], "mixer": [...]}``, a tuple/list pair, or an
-                already-flat iterable.
-
-        Returns:
-            list[float]: Flattened parameter vector matching the layout order.
-        Multi-angle:
-            Yes; prepares angle vectors for multi-angle execution.
-        """
-        if angles is None:
-            return self._ma_default_angles()
-        if isinstance(angles, dict):
-            cost_layers = angles.get("cost")
-            mixer_layers = angles.get("mixer")
-        elif isinstance(angles, (list, tuple)) and len(angles) == 2:
-            cost_layers, mixer_layers = angles
-        else:
-            return list(angles)
-        normalized_cost = self._ma_normalize_layer_angles(cost_layers, "cost")
-        normalized_mixer = self._ma_normalize_layer_angles(mixer_layers, "mixer")
-        flat = []
-        for layer_index, block in enumerate(self._ma_layout):
-            flat.extend(normalized_cost[layer_index])
-            flat.extend(normalized_mixer[layer_index])
-        return flat
-
-    def _ma_normalize_layer_angles(self, layers, kind):
-        """
-        Ensure per-layer angle blocks match the expected multi-angle layout.
-
-        Args:
-            layers (Iterable[Iterable[float]] | None): Layered angles for the given
-                ``kind``.
-            kind (str): Either ``"cost"`` or ``"mixer"``.
-
-        Returns:
-            list[list[float]]: Normalized angle blocks per layer.
-        Multi-angle:
-            Yes; validates user-supplied multi-angle blocks.
-        """
-        target_lengths = [len(block[kind]) for block in self._ma_layout]
-        if layers is None:
-            return [[self.ma_default_angle] * count for count in target_lengths]
-        layer_sequence = list(layers)
-        normalized = []
-        for idx, count in enumerate(target_lengths):
-            layer_values = layer_sequence[idx] if len(layer_sequence) > idx else None
-            if layer_values is None:
-                normalized.append([self.ma_default_angle] * count)
-            else:
-                if len(layer_values) != count:
-                    raise ValueError("MA angle blocks must match layout specification.")
-                normalized.append([float(v) for v in layer_values])
-        return normalized
-
-    def _ma_execute(self, parameters, initial_state=None):
-        """
-        Apply the configured multi-angle schedule to evolve a state.
-
-        Args:
-            parameters (Iterable[float]): Flattened multi-angle parameter vector.
-            initial_state (np.ndarray | None): Starting state; defaults to ``|+>`` if
-                omitted.
-
-        Returns:
-            np.ndarray: Normalized state after applying all multi-angle layers.
-        Multi-angle:
-            Yes; executes only when ``multi_angle`` is True.
-        """
-        backend = self.cost_hamiltonian.backend
-        param_list = []
-        for idx, p in enumerate(parameters):
-            raw = self.cost_hamiltonian.backend.to_numpy(p)
-            arr = np.asarray(raw)
-            if arr.size != 1:
-                raise ValueError(f"MA parameter at index {idx} is not scalar.")
-            val = arr.item()
-            if isinstance(val, complex):
-                if not np.allclose(val.imag, 0.0, atol=1e-12):
-                    raise ValueError(
-                        f"MA parameter at index {idx} has non-zero imaginary component."
-                    )
-                val = val.real
-            param_list.append(float(val))
-        if len(param_list) != self._ma_total_angles:
-            raise ValueError("Unexpected number of MA parameters.")
-        if initial_state is None:
-            state = backend.plus_state(self.cost_hamiltonian.nqubits)
-        else:
-            state = backend.cast(initial_state, copy=True)
-        cursor = 0
-        for block in self._ma_layout:
-            for solver in block["cost"]:
-                state = self._ma_apply_solver(solver, param_list[cursor], state)
-                cursor += 1
-            for solver in block["mixer"]:
-                state = self._ma_apply_solver(solver, param_list[cursor], state)
-                cursor += 1
-        if cursor != len(param_list):
-            raise ValueError("MA execution consumed unexpected number of parameters.")
-        return self._qaoa.normalize_state(state)
-
-    def _ma_apply_solver(self, solver, angle, state):
-        """
-        Apply a single solver to evolve the state by a given angle.
-
-        Args:
-            solver: Callable evolution operator produced by ``get_solver``.
-            angle (float): Evolution duration to set on the solver.
-            state (np.ndarray): Current state vector.
-
-        Returns:
-            np.ndarray: Updated state after applying the solver.
-        Multi-angle:
-            Yes; used inside the multi-angle execution loop.
-        """
-        solver.dt = angle
-        new_state = solver(state)
-        if self._qaoa.callbacks:
-            new_state = self._qaoa.normalize_state(new_state)
-            self._qaoa.calculate_callbacks(new_state)
-        return new_state
+    def _ma_apply_solver(self, solver, angle, state):  # MA: helper to apply a solver with callbacks
+        solver.dt = angle  # MA: set evolution duration for this gate
+        new_state = solver(state)  # MA: apply Hamiltonian exponential
+        if self._qaoa.callbacks:  # MA: reuse callback machinery
+            new_state = self._qaoa.normalize_state(new_state)  # MA: normalize before callbacks
+            self._qaoa.calculate_callbacks(new_state)  # MA: trigger callbacks on MA path
+        return new_state  # MA: return evolved state
 
     def _ma_minimize(
         self,
@@ -1214,98 +1056,65 @@ class CombinatorialQAOA:
         state_kwargs,
         method,
         **minimize_kwargs,
-    ):
-        """
-        Optimize parameters in multi-angle mode.
-
-        Args:
-            initial_angles (Iterable[float] | dict | None): Initial parameter
-                specification.
-            initial_state (np.ndarray | None): Starting state vector.
-            state_kwargs (dict | None): Arguments forwarded to the state-preparation
-                helper when ``initial_state`` is not provided.
-            method (str): Optimizer name passed to the internal optimizer.
-            **minimize_kwargs: Additional optimizer keyword arguments.
-
-        Returns:
-            tuple: ``(best_energy, parameters, extra)`` from the optimizer.
-        Multi-angle:
-            Yes; this path is only invoked when ``multi_angle`` is True.
-        """
-        flat_initial = (
+    ):  # MA: optimize MA parameters
+        flat_initial = (  # MA: ensure we have a starting vector
             self._ma_flatten_angles(initial_angles)
             if initial_angles is not None
             else self._ma_default_angles()
-        )
-        prepared_state = (
+        )  # MA: fallback to defaults when absent
+        prepared_state = (  # MA: reuse provided or freshly prepared state
             initial_state
             if initial_state is not None
             else self._prepare_state(state_kwargs)
-        )
-        backend = self.cost_hamiltonian.backend
-        minimize_options = dict(minimize_kwargs)
-        loss_func = minimize_options.pop("loss_func", None)
-        loss_func_param = minimize_options.pop("loss_func_param", {})
-        initial_vector = backend.cast(np.array(flat_initial))
+        )  # MA: unify initial state handling
+        backend = self.cost_hamiltonian.backend  # MA: backend shortcut
+        minimize_options = dict(minimize_kwargs)  # MA: copy optimizer kwargs
+        loss_func = minimize_options.pop("loss_func", None)  # MA: extract custom loss
+        loss_func_param = minimize_options.pop("loss_func_param", {})  # MA: extract loss kwargs
+        initial_vector = backend.cast(np.array(flat_initial))  # MA: cast initial vector to backend
 
-        def _loss(params, helper, hamiltonian, state, user_loss, user_kwargs):
-            return helper._ma_loss(params, hamiltonian, state, user_loss, user_kwargs)
+        def _loss(params, helper, hamiltonian, state, user_loss, user_kwargs):  # MA: closure for optimizer
+            return helper._ma_loss(params, hamiltonian, state, user_loss, user_kwargs)  # MA: delegate to helper
 
-        if method == "sgd":
+        if method == "sgd":  # MA: adapt loss for SGD optimizer expectations
             loss = (
                 lambda p, helper, h, s, lf, lfp: _loss(
                     backend.cast(p), helper, h, s, lf, lfp
                 )
-            )
-        else:
+            )  # MA: cast parameters before loss evaluation
+        else:  # MA: non-SGD paths expect numpy floats
             loss = (
                 lambda p, helper, h, s, lf, lfp: backend.to_numpy(
                     _loss(p, helper, h, s, lf, lfp)
                 )
-            )
+            )  # MA: convert backend tensors to numpy scalars
 
-        result, parameters, extra = self._qaoa.optimizers.optimize(
+        result, parameters, extra = self._qaoa.optimizers.optimize(  # MA: run optimizer using qibo utilities
             loss,
             initial_vector,
-            args=(self, self.cost_hamiltonian, prepared_state, loss_func, loss_func_param),
+            args=(self, self.cost_hamiltonian, prepared_state, loss_func, loss_func_param),  # MA: pass helper args
             method=method,
             **minimize_options,
             backend=self._qaoa.backend,
-        )
-        self._ma_cached_parameters = (
+        )  # MA: reuse qibo optimizer interface
+        self._ma_cached_parameters = (  # MA: cache optimized MA parameters as floats
             [float(v) for v in parameters] if parameters is not None else None
-        )
-        return result, parameters, extra
+        )  # MA: detach from backend tensors
+        return result, parameters, extra  # MA: mirror QAOA minimize signature
 
-    def _ma_loss(self, params, hamiltonian, base_state, user_loss, user_kwargs):
-        """
-        Evaluate the loss for multi-angle optimization.
-
-        Args:
-            params (Iterable[float]): Flattened parameter vector.
-            hamiltonian (qibo.hamiltonians.SymbolicHamiltonian): Cost Hamiltonian used
-                for expectation evaluation.
-            base_state (np.ndarray | None): Optional precomputed initial state.
-            user_loss (callable | None): Optional custom loss function.
-            user_kwargs (dict): Keyword arguments forwarded to the custom loss.
-
-        Returns:
-            float: Loss value in backend form.
-        Multi-angle:
-            Yes; used by the multi-angle optimizer.
-        """
-        backend = hamiltonian.backend
-        if base_state is not None:
-            state = backend.cast(base_state, copy=True)
-        else:
-            state = None
-        evolved = self._ma_execute(params, state)
-        if user_loss is None:
-            return hamiltonian.expectation(evolved)
-        filtered_kwargs = {
+    def _ma_loss(self, params, hamiltonian, base_state, user_loss, user_kwargs):  # MA: evaluate MA loss
+        backend = hamiltonian.backend  # MA: reuse backend for casting
+        if base_state is not None:  # MA: copy provided state
+            state = backend.cast(base_state, copy=True)  # MA: copy to avoid side effects
+        else:  # MA: default to None
+            state = None  # MA: indicate default |+>^n usage
+        evolved = self._ma_execute(params, state)  # MA: run MA circuit
+        if user_loss is None:  # MA: default to expectation value
+            return hamiltonian.expectation(evolved)  # MA: compute standard energy
+        filtered_kwargs = {  # MA: map allowed kwargs for custom loss
             key: user_kwargs[key]
             for key in user_kwargs
             if key in user_loss.__code__.co_varnames
-        }
-        loss_args = {**filtered_kwargs, "hamiltonian": hamiltonian, "state": evolved}
-        return user_loss(**loss_args)
+        }  # MA: filter unsupported parameters
+        loss_args = {**filtered_kwargs, "hamiltonian": hamiltonian, "state": evolved}  # MA: compose loss inputs
+        return user_loss(**loss_args)  # MA: evaluate custom loss

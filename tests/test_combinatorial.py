@@ -1,11 +1,13 @@
 import networkx as nx
 import numpy as np
 import pytest
+import qiboopt.combinatorial.combinatorial as combinatorial
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models import QAOA
 from test_models_variational import assert_regression_fixture
 
 from qiboopt.combinatorial.combinatorial import (
+    CombinatorialQAOA,
     MIS,
     TSP,
     MaxCut,
@@ -583,3 +585,323 @@ def test_maxcut_phaser_skips_zero_weights():
     ham = _maxcut_phaser(weights)
     assert isinstance(ham, SymbolicHamiltonian)
     assert len(ham.terms) == 2
+
+
+class _DummyBackend:
+    def plus_state(self, nqubits):
+        return np.ones(2**nqubits, dtype=float)
+
+    def cast(self, arr, copy=False):
+        return np.array(arr, copy=copy)
+
+    def to_numpy(self, arr):
+        return np.array(arr)
+
+
+class _DummyHamiltonian:
+    def __init__(self, backend, nqubits=1):
+        self.backend = backend
+        self.nqubits = nqubits
+
+    def expectation(self, state):
+        return float(np.sum(state))
+
+
+class _DummyProblem:
+    def __init__(self, backend):
+        self.backend = backend
+        self._cost = _DummyHamiltonian(backend)
+        self._mixer = _DummyHamiltonian(backend)
+
+    def hamiltonians(self):
+        return self._cost, self._mixer
+
+    def prepare_initial_state(self, offset=0):
+        base_state = np.array([0.0, 1.0], dtype=float)
+        return base_state + offset
+
+
+class _FakeSolver:
+    def __init__(self):
+        self.dt = 0.0
+
+    def __call__(self, state):
+        return state + self.dt
+
+
+class _FakeQAOA:
+    created = []
+
+    def __init__(self, cost, mixer, **kwargs):
+        self.cost = cost
+        self.mixer = mixer
+        self.kwargs = kwargs
+        self.backend = cost.backend
+        self.callbacks = []
+        self.parameters = None
+        self.minimize_calls = []
+        _FakeQAOA.created.append(self)
+
+    def minimize(self, initial_p, method, **kwargs):
+        self.minimize_calls.append((initial_p, method, kwargs))
+        return "best", np.array(initial_p), {"method": method}
+
+    def set_parameters(self, params):
+        self.parameters = list(params)
+
+    def execute(self, state):
+        return {"state": state, "params": self.parameters}
+
+    def normalize_state(self, state):
+        return state
+
+    @property
+    def optimizers(self):
+        return self
+
+    def optimize(self, loss, initial_vector, args, method, **kwargs):
+        result = loss(initial_vector, *args)
+        params = np.array(initial_vector, copy=True) + 0.01
+        return result, params, {"method": method}
+
+
+@pytest.fixture
+def dummy_setup():
+    backend = _DummyBackend()
+    return backend, _DummyProblem(backend)
+
+
+@pytest.fixture
+def fake_qaoa(monkeypatch):
+    _FakeQAOA.created = []
+    monkeypatch.setattr(combinatorial, "QAOA", _FakeQAOA)
+    return _FakeQAOA
+
+
+@pytest.fixture
+def fake_solver(monkeypatch):
+    monkeypatch.setattr(
+        combinatorial, "get_solver", lambda name, step, ham: _FakeSolver()
+    )
+
+
+def test_combinatorialqaoa_requires_positive_layers(dummy_setup, fake_qaoa):
+    _, problem = dummy_setup
+    with pytest.raises(ValueError):
+        CombinatorialQAOA(problem, layers=0)
+
+
+def test_combinatorialqaoa_prepare_state_guard(dummy_setup, fake_qaoa):
+    backend, _ = dummy_setup
+
+    class _NoPrepare:
+        def hamiltonians(self):
+            ham = _DummyHamiltonian(backend)
+            return ham, ham
+
+    helper = CombinatorialQAOA(_NoPrepare(), layers=1)
+    with pytest.raises(ValueError):
+        helper._prepare_state()
+
+
+def test_combinatorialqaoa_minimize_and_execute(dummy_setup, fake_qaoa):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=2)
+
+    best, params, info = helper.minimize(state_kwargs={"offset": 1})
+    qaoa_instance = fake_qaoa.created[-1]
+    assert best == "best"
+    assert np.allclose(qaoa_instance.minimize_calls[0][0], [0.1, 0.1])
+    assert np.array_equal(
+        qaoa_instance.minimize_calls[0][2]["initial_state"], np.array([1.0, 2.0])
+    )
+    assert params.tolist() == [0.1, 0.1]
+    assert info["method"] == "BFGS"
+
+    executed = helper.execute(parameters=[0.5, 0.6], state_kwargs={"offset": 2})
+    assert np.array_equal(executed["state"], np.array([2.0, 3.0]))
+    assert executed["params"] == [0.5, 0.6]
+
+
+def test_combinatorialqaoa_multi_angle_paths(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(
+        problem, layers=2, multi_angle=True, ma_default_angle=0.2
+    )
+
+    assert helper._ma_total_angles == 4
+    flattened = helper._ma_flatten_angles(
+        {"cost": [[0.5], [0.7]], "mixer": [[0.6], [0.8]]}
+    )
+    assert flattened == [0.5, 0.6, 0.7, 0.8]
+    with pytest.raises(ValueError):
+        helper._ma_flatten_angles({"cost": [[0.1, 0.2]], "mixer": [[0.3], [0.4]]})
+
+    executed_state = helper.execute(
+        parameters={"cost": [[0.1], [0.2]], "mixer": [[0.3], [0.4]]}
+    )
+    assert np.allclose(executed_state, np.array([1.0, 2.0]))
+
+    result, parameters, extra = helper.minimize(method="sgd")
+    assert isinstance(result, float)
+    assert len(helper._ma_cached_parameters) == helper._ma_total_angles
+    assert np.allclose(parameters, np.array(helper._ma_cached_parameters))
+
+
+def test_combinatorialqaoa_model_property(dummy_setup, fake_qaoa):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1)
+    assert helper.model is fake_qaoa.created[-1]
+
+
+def test_combinatorialqaoa_default_angles_multi_angle(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=2, multi_angle=True)
+    defaults = helper._default_angles()
+    assert len(defaults) == helper._ma_total_angles == 4
+
+
+def test_combinatorialqaoa_ma_zero_layout_raises(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    with pytest.raises(ValueError):
+        CombinatorialQAOA(
+            problem,
+            layers=1,
+            multi_angle=True,
+            ma_parameter_layout={"cost": 0, "mixer": 0},
+        )
+
+
+def test_combinatorialqaoa_ma_layout_length_mismatch(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    with pytest.raises(ValueError):
+        CombinatorialQAOA(
+            problem,
+            layers=2,
+            multi_angle=True,
+            ma_parameter_layout={"cost": [1], "mixer": [1, 1]},
+        )
+
+
+def test_combinatorialqaoa_ma_layout_out_of_range(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    with pytest.raises(ValueError):
+        CombinatorialQAOA(
+            problem,
+            layers=1,
+            multi_angle=True,
+            ma_parameter_layout={"cost": [5], "mixer": [0]},
+        )
+
+
+def test_combinatorialqaoa_flatten_angles_fallback(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    raw = helper._ma_flatten_angles(np.array([0.3, 0.4, 0.5]))
+    assert raw == [0.3, 0.4, 0.5]
+
+
+def test_combinatorialqaoa_flatten_angles_structured(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    flat = helper._ma_flatten_angles({"cost": [[0.1]], "mixer": [[0.2]]})
+    assert flat == [0.1, 0.2]
+    assert helper._ma_flatten_angles(None) == helper._ma_default_angles()
+
+
+def test_combinatorialqaoa_flatten_angles_pair(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    pair_flat = helper._ma_flatten_angles(([[0.25]], [[0.5]]))
+    assert pair_flat == [0.25, 0.5]
+
+
+def test_combinatorialqaoa_normalize_layer_angles_mismatch(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    with pytest.raises(ValueError):
+        helper._ma_normalize_layer_angles([[0.1, 0.2]], "cost")
+
+
+def test_combinatorialqaoa_normalize_layer_angles_defaults(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=2, multi_angle=True)
+    assert helper._ma_normalize_layer_angles(None, "cost") == [
+        [helper.ma_default_angle],
+        [helper.ma_default_angle],
+    ]
+    padded = helper._ma_normalize_layer_angles([[0.5]], "cost")
+    assert padded[1] == [helper.ma_default_angle]
+
+
+def test_combinatorialqaoa_ma_execute_guards(dummy_setup, fake_qaoa, fake_solver):
+    backend, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    with pytest.raises(ValueError):
+        helper._ma_execute([0.1])  # wrong length
+
+    # Valid path uses default plus_state and callbacks branch
+    params = helper._ma_default_angles()
+    helper._qaoa.callbacks = ["cb"]
+    called = {"times": 0}
+    helper._qaoa.calculate_callbacks = lambda state: called.__setitem__(
+        "times", called["times"] + 1
+    )
+    out = helper._ma_execute(params)
+    assert called["times"] > 0
+    expected = backend.plus_state(helper.cost_hamiltonian.nqubits) + sum(params)
+    assert np.allclose(out, expected)
+
+
+def test_combinatorialqaoa_ma_loss_variants(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    params = helper._ma_default_angles()
+
+    # Default loss uses hamiltonian.expectation
+    loss_val = helper._ma_loss(params, helper.cost_hamiltonian, None, None, {})
+    assert isinstance(loss_val, float)
+
+    # Custom user loss with filtered kwargs
+    def _user_loss(hamiltonian, state, extra=None):
+        return float(np.sum(state) + (extra or 0))
+
+    custom = helper._ma_loss(
+        params,
+        helper.cost_hamiltonian,
+        None,
+        _user_loss,
+        {"extra": 1.5, "ignored": 99},
+    )
+    assert isinstance(custom, float)
+
+
+def test_combinatorialqaoa_execute_uses_default_ma_angles(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    helper._ma_cached_parameters = None
+    out = helper.execute(parameters=None)
+    assert isinstance(out, np.ndarray)
+
+
+def test_combinatorialqaoa_sanitize_counts_with_none(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=2, multi_angle=True)
+    assert helper._ma_sanitize_counts(None, 3) == [3, 3]
+
+
+def test_combinatorialqaoa_execute_cursor_mismatch(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    helper._ma_layout = []
+    helper._ma_total_angles = 1
+    with pytest.raises(ValueError):
+        helper._ma_execute([0.1])
+
+
+def test_combinatorialqaoa_ma_minimize_non_sgd(dummy_setup, fake_qaoa, fake_solver):
+    _, problem = dummy_setup
+    helper = CombinatorialQAOA(problem, layers=1, multi_angle=True)
+    best, params, extra = helper.minimize(method="Powell")
+    assert np.allclose(best, float(np.array(best)))
+    assert isinstance(extra, dict)

@@ -40,13 +40,34 @@ def _should_skip(code: str) -> bool:
     )
     if any(mark in code for mark in visual_markers):
         return True
+    # Skip heavy parameter sweeps / long-running notebook cells
+    heavy_markers = (
+        "penalty_qaoa_feasibility",
+        "train_QAOA(",
+        "for penalty_pert in range(",
+    )
+    if any(mark in code for mark in heavy_markers):
+        return True
     return False
+
+
+def _lighten_code(code: str) -> str:
+    """Trim notebook code to make it fast for CI without changing logic."""
+    replacements = {
+        "nshots=100000": "nshots=1000",
+        "nshots = 100000": "nshots = 1000",
+    }
+    for old, new in replacements.items():
+        code = code.replace(old, new)
+    return code
 
 
 @pytest.mark.parametrize(
     "notebook_rel",
     [
         Path("tutorial") / "Max-Cut.ipynb",
+        Path("tutorial") / "Max-Cut with QAOA class.ipynb",
+        Path("tutorial") / "TSP with QAOA class.ipynb",
     ],
 )
 def test_execute_notebook_for_coverage(notebook_rel: Path):
@@ -70,6 +91,7 @@ def test_execute_notebook_for_coverage(notebook_rel: Path):
     for code in _load_notebook_cells(nb_path):
         if _should_skip(code):
             continue
+        code = _lighten_code(code)
         # Some notebooks assume cwd at repo root; enforce it
         cwd_before = os.getcwd()
         try:
