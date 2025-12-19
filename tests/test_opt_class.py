@@ -578,9 +578,17 @@ def test_linear_square():
     assert offset == expected_offset
 
 
-def test_variable_dict_to_ind():
-    variable_dict = {("x1", "x2"): 1.5, ("x2", "x3"): -0.5, "x3": 2.0}
-    var_to_idx = {"x1": 0, "x2": 1, "x3": 2}
+@pytest.mark.parametrize(
+    "variable_dict, var_to_idx, expected",
+    [
+        (
+            {("x1", "x2"): 1.5, ("x2", "x3"): -0.5, "x3": 2.0},
+            {"x1": 0, "x2": 1, "x3": 2},
+            {(0, 1): 1.5, (1, 2): -0.5, 2: 2.0},
+        ),
+        ({((0, 1), (1, 0)): 1}, {(0, 1): 0, (1, 0): 1}, {(0, 1): 1}),
+    ],
+)
+def test_variable_dict_to_ind(variable_dict, var_to_idx, expected):
     ind_dict = variable_dict_to_ind_dict(variable_dict, var_to_idx)
-    expected = {(0, 1): 1.5, (1, 2): -0.5, 2: 2.0}
     assert expected == ind_dict
