@@ -2,6 +2,8 @@
 Various combinatorial optimisation applications that are commonly formulated as QUBO problems.
 """
 
+# pylint: disable=too-many-lines
+
 import networkx as nx
 import numpy as np
 from qibo import gates
@@ -15,7 +17,6 @@ from qibo.symbols import X, Y, Z
 from qiboopt.opt_class.opt_class import (
     QUBO,
     LinearProblem,
-    variable_dict_to_ind_dict,
     variable_to_ind,
 )
 
@@ -123,7 +124,8 @@ def _tsp_mixer(num_cities, backend=None):
 
 class TSP:
     """
-    Class representing the Travelling Salesman Problem (TSP). The implementation is based on the work by Hadfield.
+    Class representing the Travelling Salesman Problem (TSP). The implementation
+    is based on the work by Hadfield.
 
     Args:
         distance_matrix: a numpy matrix encoding the distance matrix.
@@ -202,8 +204,9 @@ class TSP:
             qaoa_function_of_layer(2, distance_matrix)
 
     Reference:
-        1. S. Hadfield, Z. Wang, B. O'Gorman, E. G. Rieffel, D. Venturelli, R. Biswas, *From the Quantum Approximate
-        Optimization Algorithm to a Quantum Alternating Operator Ansatz*.
+        1. S. Hadfield, Z. Wang, B. O'Gorman, E. G. Rieffel, D. Venturelli, R. Biswas,
+        *From the Quantum Approximate Optimization Algorithm to a Quantum Alternating
+        Operator Ansatz*.
         (`arxiv:1709.03489 <https://arxiv.org/abs/1709.03489>`__)
     """
 
@@ -347,41 +350,42 @@ def _ensure_weight_matrix(g_or_w):
       - a symmetric numpy array (n x n) with zero diagonal, or
       - a networkx.Graph with optional 'weight' on edges (default 1.0).
     Returns:
-      W (np.ndarray, shape [n, n]), node_list (list): order of nodes if graph given.
+      weight_matrix (np.ndarray, shape [n, n]), node_list (list): order of nodes if
+      graph given.
     """
     if isinstance(g_or_w, np.ndarray):
-        W = np.array(g_or_w, dtype=float)
-        if W.shape[0] != W.shape[1]:
+        weight_matrix = np.array(g_or_w, dtype=float)
+        if weight_matrix.shape[0] != weight_matrix.shape[1]:
             raise ValueError("Weight matrix must be square.")
-        if not np.allclose(W, W.T, atol=1e-12):
+        if not np.allclose(weight_matrix, weight_matrix.T, atol=1e-12):
             raise ValueError("Weight matrix must be symmetric for Max-Cut.")
-        np.fill_diagonal(W, 0.0)
-        node_list = list(range(W.shape[0]))
-        return W, node_list
+        np.fill_diagonal(weight_matrix, 0.0)
+        node_list = list(range(weight_matrix.shape[0]))
+        return weight_matrix, node_list
 
     if isinstance(g_or_w, nx.Graph):
         nodes = list(g_or_w.nodes())
         n = len(nodes)
         idx = {u: i for i, u in enumerate(nodes)}
-        W = np.zeros((n, n), dtype=float)
+        weight_matrix = np.zeros((n, n), dtype=float)
         for u, v, data in g_or_w.edges(data=True):
             w = float(data.get("weight", 1.0))
             i, j = idx[u], idx[v]
             if i == j:
                 continue
-            W[i, j] = W[j, i] = w
-        return W, nodes
+            weight_matrix[i, j] = weight_matrix[j, i] = w
+        return weight_matrix, nodes
 
     raise TypeError("Expected a numpy array or a networkx.Graph.")
 
 
-def _edge_list_from_W(W, tol=1e-12):
+def _edge_list_from_weight_matrix(weight_matrix, tol=1e-12):
     """Return list of (i,j) with i<j where |W_ij|>tol."""
-    n = W.shape[0]
+    n = weight_matrix.shape[0]
     edges = []
     for i in range(n):
         for j in range(i + 1, n):
-            if abs(W[i, j]) > tol:
+            if abs(weight_matrix[i, j]) > tol:
                 edges.append((i, j))
     return edges
 
@@ -403,6 +407,7 @@ def _maxcut_phaser(weight_matrix, backend=None, drop_constant=True):
     """
     n = weight_matrix.shape[0]
     form = 0
+    constant = 0.0
     for i in range(n):
         for j in range(i + 1, n):
             w = weight_matrix[i, j]
@@ -410,8 +415,12 @@ def _maxcut_phaser(weight_matrix, backend=None, drop_constant=True):
                 continue
             # keep only the ZZ term by default (constant dropped)
             form += (0.5 * w) * Z(i) * Z(j)
+            if not drop_constant:
+                constant += 0.5 * w
             # if you ever want the constant term: add (+0.5*w) to a running scalar
             # but SymbolicHamiltonian doesn't need it for optimization/QAOA.
+    if not drop_constant and constant:
+        form += constant
     return SymbolicHamiltonian(form, backend=backend)
 
 
@@ -442,7 +451,7 @@ def _maxcut_mixer(n, mode="x", edges=None, backend=None):
     raise ValueError("mixer must be one of {'x','xy'}.")
 
 
-def _normalize(W, mode):
+def _normalize(weight_matrix, mode):
     """
     Normalizes W and returns (W_scaled, scale_factor c).
 
@@ -463,24 +472,24 @@ def _normalize(W, mode):
     """
     mode = (mode or "none").lower()
     if mode == "none":
-        return W.copy(), 1.0
+        return weight_matrix.copy(), 1.0
 
     if mode == "maxdeg":
-        c = np.max(np.sum(np.abs(W), axis=1))
+        c = np.max(np.sum(np.abs(weight_matrix), axis=1))
         if c == 0:
             c = 1.0
-        return W / c, c
+        return weight_matrix / c, c
 
     if mode == "sum":
-        c = np.sum(np.abs(np.triu(W, 1)))
+        c = np.sum(np.abs(np.triu(weight_matrix, 1)))
         if c == 0:
             c = 1.0
-        return W / c, c
+        return weight_matrix / c, c
 
     raise ValueError("normalize must be one of {'none','maxdeg','sum'}.")
 
 
-class MaxCut:
+class MaxCut:  # pylint: disable=too-many-instance-attributes
     """
     Max-Cut problem (unconstrained) with QUBO and QAOA-ready Hamiltonians.
 
@@ -532,19 +541,21 @@ class MaxCut:
 
     def __init__(self, graph_or_weights, backend=None, normalize="none", mixer="x"):
         self.backend = _check_backend(backend)
+        # pylint: disable=invalid-name
         self.W_raw, self.nodes = _ensure_weight_matrix(graph_or_weights)
         self.n = self.W_raw.shape[0]
 
         # normalization
         self.W, self.energy_scale = _normalize(self.W_raw, normalize)
+        # pylint: enable=invalid-name
         self.normalize = normalize
 
         # mixer choice
         self.mixer_mode = mixer
-        self._edges = _edge_list_from_W(self.W)  # for 'xy' mixer
+        self._edges = _edge_list_from_weight_matrix(self.W)  # for 'xy' mixer
 
         # index <-> node mapping
-        self.ind_to_node = {i: u for i, u in enumerate(self.nodes)}
+        self.ind_to_node = dict(enumerate(self.nodes))
         self.node_to_ind = {u: i for i, u in enumerate(self.nodes)}
 
     # Hamiltonians
@@ -626,13 +637,13 @@ class MaxCut:
             Hamiltonian used in QAOA (e.g., for hybrid workflows).
           * use_scaled=False if you want the solver’s objective in *original units*.
         """
-        Wq = self.W if use_scaled else self.W_raw
+        weight_matrix = self.W if use_scaled else self.W_raw
         q = {}
         n = self.n
         s = -1.0 if maximize else 1.0  # flip sign for minimization solvers
         for i in range(n):
             for j in range(i + 1, n):
-                w = Wq[i, j]
+                w = weight_matrix[i, j]
                 if w == 0:
                     continue
                 q[(i, i)] = q.get((i, i), 0.0) + s * w
@@ -660,13 +671,13 @@ class MaxCut:
         )
         if x.size != self.n:
             raise ValueError("Assignment length must equal number of vertices.")
-        Wv = self.W if use_scaled else self.W_raw
+        weight_matrix = self.W if use_scaled else self.W_raw
         val = 0.0
         for i in range(self.n):
             for j in range(i + 1, self.n):
-                if Wv[i, j] == 0:
+                if weight_matrix[i, j] == 0:
                     continue
-                val += Wv[i, j] * (x[i] ^ x[j])
+                val += weight_matrix[i, j] * (x[i] ^ x[j])
         return float(val)
 
     def partition_from_bits(self, bits):
@@ -676,12 +687,12 @@ class MaxCut:
         x = [int(b) for b in (bits.strip() if isinstance(bits, str) else bits)]
         if len(x) != self.n:
             raise ValueError("Assignment length must equal number of vertices.")
-        S = {self.ind_to_node[i] for i, b in enumerate(x) if b == 0}
-        Sp = {self.ind_to_node[i] for i, b in enumerate(x) if b == 1}
-        return S, Sp
+        left_set = {self.ind_to_node[i] for i, b in enumerate(x) if b == 0}
+        right_set = {self.ind_to_node[i] for i, b in enumerate(x) if b == 1}
+        return left_set, right_set
 
     # Energy rescaling
-    def rescale_energy(self, E_scaled):
+    def rescale_energy(self, E_scaled):  # pylint: disable=invalid-name
         """
         Convert an energy/expectation computed with the *scaled* Hamiltonian
         back to original units: E_true = energy_scale * E_scaled.
@@ -689,7 +700,10 @@ class MaxCut:
         return self.energy_scale * E_scaled
 
     def __str__(self):
-        return f"{self.__class__.__name__}(n={self.n}, normalize='{self.normalize}', mixer='{self.mixer_mode}')"
+        return (
+            f"{self.__class__.__name__}(n={self.n}, normalize='{self.normalize}', "
+            f"mixer='{self.mixer_mode}')"
+        )
 
 
 class CombinatorialQAOA:
@@ -718,7 +732,7 @@ class CombinatorialQAOA:
         >>> energy, params, _ = helper.minimize(state_kwargs={"init": "plus"})
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         problem,
         layers=1,
@@ -781,7 +795,8 @@ class CombinatorialQAOA:
         """
         if not hasattr(self.problem, "prepare_initial_state"):
             raise ValueError(
-                "Problem does not define 'prepare_initial_state'; please supply 'initial_state' explicitly."
+                "Problem does not define 'prepare_initial_state'; "
+                "please supply 'initial_state' explicitly."
             )
         kwargs = state_kwargs or {}
         return self.problem.prepare_initial_state(**kwargs)
@@ -856,7 +871,7 @@ class CombinatorialQAOA:
         return self._qaoa.execute(state)
 
 
-class CombinatorialMAQAOA(CombinatorialQAOA):
+class CombinatorialMAQAOA(CombinatorialQAOA):  # pylint: disable=too-many-instance-attributes
     """
     Multi-angle QAOA helper that assigns separate parameters to each operator block
     in a layer.
@@ -891,7 +906,7 @@ class CombinatorialMAQAOA(CombinatorialQAOA):
         ... )
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         problem,
         layers=1,
@@ -1116,7 +1131,7 @@ class CombinatorialMAQAOA(CombinatorialQAOA):
             if len(expanded) != self.layers:
                 raise ValueError("MA layout length must equal number of layers.")
         for value in expanded:
-            if not (0 <= value <= max_available):
+            if not 0 <= value <= max_available:
                 raise ValueError("MA layout entries must be within available operator range.")
         return expanded
 
@@ -1157,7 +1172,7 @@ class CombinatorialMAQAOA(CombinatorialQAOA):
         normalized_cost = self._ma_normalize_layer_angles(cost_layers, "cost")
         normalized_mixer = self._ma_normalize_layer_angles(mixer_layers, "mixer")
         flat = []
-        for layer_index, block in enumerate(self._ma_layout):
+        for layer_index, _ in enumerate(self._ma_layout):
             flat.extend(normalized_cost[layer_index])
             flat.extend(normalized_mixer[layer_index])
         return flat
@@ -1253,7 +1268,7 @@ class CombinatorialMAQAOA(CombinatorialQAOA):
             self._qaoa.calculate_callbacks(new_state)
         return new_state
 
-    def _ma_minimize(
+    def _ma_minimize(  # pylint: disable=too-many-locals
         self,
         *,
         initial_angles,
@@ -1293,26 +1308,23 @@ class CombinatorialMAQAOA(CombinatorialQAOA):
         loss_func_param = minimize_options.pop("loss_func_param", {})
         initial_vector = backend.cast(np.array(flat_initial))
 
-        def _loss(params, helper, hamiltonian, state, user_loss, user_kwargs):
-            return helper._ma_loss(params, hamiltonian, state, user_loss, user_kwargs)
+        def _loss(params, hamiltonian, state, user_loss, user_kwargs):
+            return self._ma_loss(params, hamiltonian, state, user_loss, user_kwargs)
 
         if method == "sgd":
-            loss = (
-                lambda p, helper, h, s, lf, lfp: _loss(
-                    backend.cast(p), helper, h, s, lf, lfp
-                )
-            )
+
+            def loss(p, h, s, lf, lfp):
+                return _loss(backend.cast(p), h, s, lf, lfp)
+
         else:
-            loss = (
-                lambda p, helper, h, s, lf, lfp: backend.to_numpy(
-                    _loss(p, helper, h, s, lf, lfp)
-                )
-            )
+
+            def loss(p, h, s, lf, lfp):
+                return backend.to_numpy(_loss(p, h, s, lf, lfp))
 
         result, parameters, extra = self._qaoa.optimizers.optimize(
             loss,
             initial_vector,
-            args=(self, self.cost_hamiltonian, prepared_state, loss_func, loss_func_param),
+            args=(self.cost_hamiltonian, prepared_state, loss_func, loss_func_param),
             method=method,
             **minimize_options,
             backend=self._qaoa.backend,
@@ -1322,7 +1334,9 @@ class CombinatorialMAQAOA(CombinatorialQAOA):
         )
         return result, parameters, extra
 
-    def _ma_loss(self, params, hamiltonian, base_state, user_loss, user_kwargs):
+    def _ma_loss(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+        self, params, hamiltonian, base_state, user_loss, user_kwargs
+    ):
         """
         Evaluate the loss for multi-angle optimization.
 
@@ -1377,7 +1391,7 @@ class CombinatorialLRQAOA(CombinatorialQAOA):
             :class:`qibo.models.QAOA`. [Default None]
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         problem,
         layers=1,
@@ -1494,7 +1508,7 @@ class CombinatorialLRQAOA(CombinatorialQAOA):
             return [float(values)]
         return [float(v) for v in values]
 
-    def sweep_deltas(
+    def sweep_deltas(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         delta_betas,
         delta_gammas,
@@ -1552,8 +1566,8 @@ class CombinatorialLRQAOA(CombinatorialQAOA):
                         "delta_gamma": dg,
                     }
                     filtered = {
-                        key: score_kwargs[key]
-                        for key in score_kwargs
+                        key: value
+                        for key, value in score_kwargs.items()
                         if key in score_fn.__code__.co_varnames
                     }
                     score = score_fn(**filtered)
