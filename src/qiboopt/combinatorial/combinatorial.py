@@ -390,6 +390,11 @@ def _edge_list_from_weight_matrix(weight_matrix, tol=1e-12):
     return edges
 
 
+def _edge_list_from_W(weight_matrix, tol=1e-12):
+    """Backward-compatible alias for _edge_list_from_weight_matrix."""
+    return _edge_list_from_weight_matrix(weight_matrix, tol=tol)
+
+
 # Hamiltonian Builders
 
 
