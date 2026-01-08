@@ -694,10 +694,12 @@ class MaxCut:
 
 class CombinatorialQAOA:
     """
-    Lightweight helper around :class:`qibo.models.QAOA` for the problems defined in this
-    module (or any object exposing ``hamiltonians()`` and, optionally,
-    ``prepare_initial_state``). It also exposes optional multi-angle (MA) controls so
-    each layer can carry different rotation parameters per Hamiltonian block.
+    Lightweight helper around :class:`qibo.models.QAOA` for the problems defined in
+    this module (or any object exposing ``hamiltonians()`` and, optionally,
+    ``prepare_initial_state``).
+
+    For multi-angle or linear-ramp parametrizations use
+    :class:`CombinatorialMAQAOA` or :class:`CombinatorialLRQAOA`.
 
     Args:
         problem: Problem instance (e.g., :class:`TSP`, :class:`MaxCut`) that provides
@@ -705,22 +707,10 @@ class CombinatorialQAOA:
         layers (int): Number of QAOA layers (controls the default initial parameter
             vector length). Must be positive. [Default 1]
         cost_hamiltonian: Optional override of the cost Hamiltonian returned by the
-            problem.  [Default None]
+            problem. [Default None]
         mixer_hamiltonian: Optional override of the mixer Hamiltonian. [Default None]
         qaoa_kwargs (dict): Extra keyword arguments passed directly to
             :class:`qibo.models.QAOA`. [Default None]
-        multi_angle (bool): Enable MA mode using dedicated cost/mixer operator lists. 
-                            [Default False]
-        ma_cost_operators (list): Ordered cost Hamiltonians used inside MA layers. 
-                            [Default None]
-        ma_mixer_operators (list): Ordered mixer Hamiltonians used inside MA layers. 
-                            [Default None]
-        ma_parameter_layout (dict): Optional per-layer counts for MA angles. 
-                            [Default None]
-        ma_default_angle (float): Default initial value for every MA angle. 
-                            [Default None]
-        ma_solver (str): Solver backend used for the MA operator exponentials. 
-                            [Default "exp"]
 
     Example:
         >>> mc = MaxCut(W)
@@ -736,16 +726,9 @@ class CombinatorialQAOA:
         cost_hamiltonian=None,
         mixer_hamiltonian=None,
         qaoa_kwargs=None,
-        multi_angle=False,
-        ma_cost_operators=None,
-        ma_mixer_operators=None,
-        ma_parameter_layout=None,
-        ma_default_angle=0.1,
-        ma_solver="exp",
     ):
         """
-        Initialize a QAOA helper for combinatorial problems with optional
-        multi-angle parametrization.
+        Initialize a QAOA helper for combinatorial problems.
 
         Args:
             problem (object): Problem exposing ``hamiltonians()`` and optionally
@@ -757,24 +740,6 @@ class CombinatorialQAOA:
                 Hamiltonian override; defaults to the problem-provided one.
             qaoa_kwargs (dict | None): Extra keyword arguments forwarded to
                 :class:`qibo.models.QAOA`.
-            multi_angle (bool): Enable multi-angle execution with separate operators
-                per block.
-            ma_cost_operators (list[qibo.hamiltonians.SymbolicHamiltonian] | None):
-                Ordered cost operators used in each multi-angle layer.
-            ma_mixer_operators (list[qibo.hamiltonians.SymbolicHamiltonian] | None):
-                Ordered mixer operators used in each multi-angle layer.
-            ma_parameter_layout (dict | None): Optional per-layer operator counts with
-                keys ``cost`` and ``mixer``.
-            ma_default_angle (float): Default initial value used when angles are not
-                provided.
-            ma_solver (str): Solver backend name for exponentiating multi-angle
-                operators.
-
-        Returns:
-            None
-        Multi-angle:
-            Supports both modes; multi-angle features activate when
-            ``multi_angle`` is True.
         """
         if layers <= 0:
             raise ValueError("layers must be a positive integer.")
@@ -792,22 +757,6 @@ class CombinatorialQAOA:
         self._qaoa = QAOA(
             self.cost_hamiltonian, mixer=self.mixer_hamiltonian, **qaoa_kwargs
         )
-        self.multi_angle = bool(multi_angle)
-        self.ma_default_angle = ma_default_angle
-        self._ma_cached_parameters = None
-        self._ma_cost_ops = None
-        self._ma_mixer_ops = None
-        self._ma_cost_solvers = None
-        self._ma_mixer_solvers = None
-        self._ma_layout = None
-        self._ma_total_angles = 0
-        if self.multi_angle:
-            self._init_ma_support(
-                solver_name=ma_solver,
-                cost_ops=ma_cost_operators,
-                mixer_ops=ma_mixer_operators,
-                layout_spec=ma_parameter_layout,
-            )
 
     @property
     def model(self):
@@ -816,8 +765,6 @@ class CombinatorialQAOA:
 
         Returns:
             qibo.models.QAOA: Configured model instance.
-        Multi-angle:
-            No; available in both modes.
         """
         return self._qaoa
 
@@ -831,8 +778,6 @@ class CombinatorialQAOA:
 
         Returns:
             np.ndarray: Prepared initial state.
-        Multi-angle:
-            No; shared helper for both modes.
         """
         if not hasattr(self.problem, "prepare_initial_state"):
             raise ValueError(
@@ -845,17 +790,9 @@ class CombinatorialQAOA:
         """
         Build a default parameter vector for optimization.
 
-        Args:
-            None
-
         Returns:
-            list[float]: Default angles sized for the active parameterization.
-        Multi-angle:
-            Returns multi-angle defaults when enabled; otherwise returns one angle
-            per layer.
+            list[float]: Default angles sized to ``layers``.
         """
-        if self.multi_angle:
-            return self._ma_default_angles()
         return [0.1] * self.layers
 
     def minimize(
@@ -871,33 +808,18 @@ class CombinatorialQAOA:
         Optimize the QAOA parameters for the provided problem.
 
         Args:
-            initial_angles (list[float] | np.ndarray | dict | None): Initial parameter
-                vector; accepts flattened angles or per-block dictionaries in
-                multi-angle mode.
+            initial_angles (list[float] | np.ndarray | None): Initial parameter vector.
             initial_state (np.ndarray | None): Optional state vector to start the
                 algorithm.
             state_kwargs (dict | None): Keyword arguments forwarded to the problem's
                 ``prepare_initial_state`` when ``initial_state`` is not supplied.
-            method (str): Classical optimizer passed to :func:`QAOA.minimize` or the
-                multi-angle optimizer.
-            **minimize_kwargs: Additional keyword arguments forwarded to the selected
+            method (str): Classical optimizer passed to :func:`QAOA.minimize`.
+            **minimize_kwargs: Additional keyword arguments forwarded to the
                 optimizer.
 
         Returns:
             tuple: ``(best_energy, parameters, info)`` matching the optimizer output.
-        Multi-angle:
-            Uses the multi-angle optimizer when ``multi_angle`` is True; otherwise runs
-            the standard QAOA minimization.
         """
-        if self.multi_angle:
-            return self._ma_minimize(
-                initial_angles=initial_angles,
-                initial_state=initial_state,
-                state_kwargs=state_kwargs,
-                method=method,
-                **minimize_kwargs,
-            )
-
         angles = initial_angles if initial_angles is not None else self._default_angles()
         call_kwargs = dict(minimize_kwargs)
 
@@ -914,8 +836,7 @@ class CombinatorialQAOA:
         Execute the QAOA circuit using stored or provided parameters.
 
         Args:
-            parameters (iterable | dict | None): Parameter vector to load before
-                execution; accepts multi-angle dictionaries when enabled.
+            parameters (iterable | None): Parameter vector to load before execution.
             initial_state (np.ndarray | None): State vector to evolve. If omitted, it
                 is constructed via ``state_kwargs`` and the problem instance.
             state_kwargs (dict | None): Keyword arguments passed to the problem's
@@ -923,23 +844,7 @@ class CombinatorialQAOA:
 
         Returns:
             np.ndarray: Final state prepared by QAOA.
-        Multi-angle:
-            Executes the multi-angle schedule when ``multi_angle`` is True; otherwise
-            runs the standard QAOA circuit.
         """
-        if self.multi_angle:
-            flat_params = (
-                self._ma_flatten_angles(parameters)
-                if parameters is not None
-                else self._ma_cached_parameters
-            )
-            if flat_params is None:
-                flat_params = self._ma_default_angles()
-            state = (
-                initial_state if initial_state is not None else self._prepare_state(state_kwargs)
-            )
-            return self._ma_execute(flat_params, state)
-
         if parameters is not None:
             self._qaoa.set_parameters(parameters)
 
@@ -949,6 +854,172 @@ class CombinatorialQAOA:
         print(f"Parameters: {parameters}")
         print(f"State: {state}")
         return self._qaoa.execute(state)
+
+
+class CombinatorialMAQAOA(CombinatorialQAOA):
+    """
+    Multi-angle QAOA helper that assigns separate parameters to each operator block
+    in a layer.
+
+    Args:
+        problem: Problem instance (e.g., :class:`TSP`, :class:`MaxCut`) that provides
+            the Hamiltonians and, if needed, an initial-state factory.
+        layers (int): Number of QAOA layers (controls the default initial parameter
+            vector length). Must be positive. [Default 1]
+        cost_hamiltonian: Optional override of the cost Hamiltonian returned by the
+            problem. [Default None]
+        mixer_hamiltonian: Optional override of the mixer Hamiltonian. [Default None]
+        qaoa_kwargs (dict): Extra keyword arguments passed directly to
+            :class:`qibo.models.QAOA`. [Default None]
+        ma_cost_operators (list): Ordered cost Hamiltonians used inside MA layers.
+            [Default None]
+        ma_mixer_operators (list): Ordered mixer Hamiltonians used inside MA layers.
+            [Default None]
+        ma_parameter_layout (dict): Optional per-layer counts for MA angles.
+            [Default None]
+        ma_default_angle (float): Default initial value for every MA angle.
+            [Default 0.1]
+        ma_solver (str): Solver backend used for the MA operator exponentials.
+            [Default "exp"]
+
+    Example:
+        >>> ma_helper = CombinatorialMAQAOA(
+        ...     problem,
+        ...     layers=2,
+        ...     ma_cost_operators=[ham1, ham2],
+        ...     ma_mixer_operators=[mixer],
+        ... )
+    """
+
+    def __init__(
+        self,
+        problem,
+        layers=1,
+        *,
+        cost_hamiltonian=None,
+        mixer_hamiltonian=None,
+        qaoa_kwargs=None,
+        ma_cost_operators=None,
+        ma_mixer_operators=None,
+        ma_parameter_layout=None,
+        ma_default_angle=0.1,
+        ma_solver="exp",
+    ):
+        """
+        Initialize a multi-angle QAOA helper for combinatorial problems.
+
+        Args:
+            problem (object): Problem exposing ``hamiltonians()`` and optionally
+                ``prepare_initial_state``.
+            layers (int): Number of alternating cost/mixer layers.
+            cost_hamiltonian (qibo.hamiltonians.SymbolicHamiltonian | None): Cost
+                Hamiltonian override; defaults to the problem-provided one.
+            mixer_hamiltonian (qibo.hamiltonians.SymbolicHamiltonian | None): Mixer
+                Hamiltonian override; defaults to the problem-provided one.
+            qaoa_kwargs (dict | None): Extra keyword arguments forwarded to
+                :class:`qibo.models.QAOA`.
+            ma_cost_operators (list[qibo.hamiltonians.SymbolicHamiltonian] | None):
+                Ordered cost operators used in each multi-angle layer.
+            ma_mixer_operators (list[qibo.hamiltonians.SymbolicHamiltonian] | None):
+                Ordered mixer operators used in each multi-angle layer.
+            ma_parameter_layout (dict | None): Optional per-layer operator counts with
+                keys ``cost`` and ``mixer``.
+            ma_default_angle (float): Default initial value used when angles are not
+                provided.
+            ma_solver (str): Solver backend name for exponentiating multi-angle
+                operators.
+        """
+        super().__init__(
+            problem,
+            layers,
+            cost_hamiltonian=cost_hamiltonian,
+            mixer_hamiltonian=mixer_hamiltonian,
+            qaoa_kwargs=qaoa_kwargs,
+        )
+        self.ma_default_angle = ma_default_angle
+        self._ma_cached_parameters = None
+        self._ma_cost_ops = None
+        self._ma_mixer_ops = None
+        self._ma_cost_solvers = None
+        self._ma_mixer_solvers = None
+        self._ma_layout = None
+        self._ma_total_angles = 0
+        self._init_ma_support(
+            solver_name=ma_solver,
+            cost_ops=ma_cost_operators,
+            mixer_ops=ma_mixer_operators,
+            layout_spec=ma_parameter_layout,
+        )
+
+    def _default_angles(self):
+        """
+        Build a default parameter vector for multi-angle optimization.
+
+        Returns:
+            list[float]: Default angles ordered by the multi-angle layout.
+        """
+        return self._ma_default_angles()
+
+    def minimize(
+        self,
+        *,
+        initial_angles=None,
+        initial_state=None,
+        state_kwargs=None,
+        method="BFGS",
+        **minimize_kwargs,
+    ):
+        """
+        Optimize the QAOA parameters using the multi-angle optimizer.
+
+        Args:
+            initial_angles (list[float] | np.ndarray | dict | None): Initial parameter
+                vector; accepts flattened angles or per-block dictionaries.
+            initial_state (np.ndarray | None): Optional state vector to start the
+                algorithm.
+            state_kwargs (dict | None): Keyword arguments forwarded to the problem's
+                ``prepare_initial_state`` when ``initial_state`` is not supplied.
+            method (str): Classical optimizer passed to the multi-angle optimizer.
+            **minimize_kwargs: Additional keyword arguments forwarded to the
+                optimizer.
+
+        Returns:
+            tuple: ``(best_energy, parameters, info)`` matching the optimizer output.
+        """
+        return self._ma_minimize(
+            initial_angles=initial_angles,
+            initial_state=initial_state,
+            state_kwargs=state_kwargs,
+            method=method,
+            **minimize_kwargs,
+        )
+
+    def execute(self, parameters=None, initial_state=None, state_kwargs=None):
+        """
+        Execute the QAOA circuit using the multi-angle schedule.
+
+        Args:
+            parameters (iterable | dict | None): Parameter vector to load before
+                execution; accepts structured multi-angle inputs.
+            initial_state (np.ndarray | None): State vector to evolve. If omitted, it
+                is constructed via ``state_kwargs`` and the problem instance.
+            state_kwargs (dict | None): Keyword arguments passed to the problem's
+                ``prepare_initial_state`` when ``initial_state`` is omitted.
+
+        Returns:
+            np.ndarray: Final state prepared by QAOA.
+        """
+        flat_params = (
+            self._ma_flatten_angles(parameters)
+            if parameters is not None
+            else self._ma_cached_parameters
+        )
+        if flat_params is None:
+            flat_params = self._ma_default_angles()
+        state = (
+            initial_state if initial_state is not None else self._prepare_state(state_kwargs)
+        )
+        return self._ma_execute(flat_params, state)
 
     def _init_ma_support(self, *, solver_name, cost_ops, mixer_ops, layout_spec):
         """
@@ -962,11 +1033,6 @@ class CombinatorialQAOA:
                 operators to include in each block.
             layout_spec (dict | None): Optional per-layer counts for ``cost`` and
                 ``mixer`` operators.
-
-        Returns:
-            None
-        Multi-angle:
-            Yes; only used when ``multi_angle`` is True.
         """
         cost_sequence = cost_ops or [self.cost_hamiltonian]
         mixer_sequence = mixer_ops or [self.mixer_hamiltonian]
@@ -995,8 +1061,6 @@ class CombinatorialQAOA:
 
         Returns:
             list[dict]: Layout with ``cost`` and ``mixer`` solver lists per layer.
-        Multi-angle:
-            Yes; defines the structure of multi-angle layers.
         """
         cost_counts, mixer_counts = self._ma_expand_counts(layout_spec)
         layout = []
@@ -1019,8 +1083,6 @@ class CombinatorialQAOA:
 
         Returns:
             tuple[list[int], list[int]]: Per-layer counts for cost and mixer blocks.
-        Multi-angle:
-            Yes; governs how multi-angle operators repeat across layers.
         """
         default_cost = len(self._ma_cost_solvers)
         default_mixer = len(self._ma_mixer_solvers)
@@ -1044,8 +1106,6 @@ class CombinatorialQAOA:
 
         Returns:
             list[int]: Normalized counts per layer.
-        Multi-angle:
-            Yes; ensures multi-angle layouts stay within available operators.
         """
         if counts is None:
             counts = max_available
@@ -1064,13 +1124,8 @@ class CombinatorialQAOA:
         """
         Build the default flattened parameter vector for multi-angle mode.
 
-        Args:
-            None
-
         Returns:
             list[float]: Default angles ordered by the multi-angle layout.
-        Multi-angle:
-            Yes; used only when ``multi_angle`` is True.
         """
         defaults = []
         for block in self._ma_layout:
@@ -1089,8 +1144,6 @@ class CombinatorialQAOA:
 
         Returns:
             list[float]: Flattened parameter vector matching the layout order.
-        Multi-angle:
-            Yes; prepares angle vectors for multi-angle execution.
         """
         if angles is None:
             return self._ma_default_angles()
@@ -1120,8 +1173,6 @@ class CombinatorialQAOA:
 
         Returns:
             list[list[float]]: Normalized angle blocks per layer.
-        Multi-angle:
-            Yes; validates user-supplied multi-angle blocks.
         """
         target_lengths = [len(block[kind]) for block in self._ma_layout]
         if layers is None:
@@ -1149,8 +1200,6 @@ class CombinatorialQAOA:
 
         Returns:
             np.ndarray: Normalized state after applying all multi-angle layers.
-        Multi-angle:
-            Yes; executes only when ``multi_angle`` is True.
         """
         backend = self.cost_hamiltonian.backend
         param_list = []
@@ -1196,8 +1245,6 @@ class CombinatorialQAOA:
 
         Returns:
             np.ndarray: Updated state after applying the solver.
-        Multi-angle:
-            Yes; used inside the multi-angle execution loop.
         """
         solver.dt = angle
         new_state = solver(state)
@@ -1229,8 +1276,6 @@ class CombinatorialQAOA:
 
         Returns:
             tuple: ``(best_energy, parameters, extra)`` from the optimizer.
-        Multi-angle:
-            Yes; this path is only invoked when ``multi_angle`` is True.
         """
         flat_initial = (
             self._ma_flatten_angles(initial_angles)
@@ -1291,8 +1336,6 @@ class CombinatorialQAOA:
 
         Returns:
             float: Loss value in backend form.
-        Multi-angle:
-            Yes; used by the multi-angle optimizer.
         """
         backend = hamiltonian.backend
         if base_state is not None:
@@ -1309,3 +1352,224 @@ class CombinatorialQAOA:
         }
         loss_args = {**filtered_kwargs, "hamiltonian": hamiltonian, "state": evolved}
         return user_loss(**loss_args)
+
+
+class CombinatorialLRQAOA(CombinatorialQAOA):
+    """
+    Linear-ramp QAOA helper with fixed, interleaved parameters per layer.
+
+    The linear ramp schedule uses:
+      beta_i = (1 - i / p) * delta_beta
+      gamma_i = ((i + 1) / p) * delta_gamma
+    with i = 0..p-1 and parameters ordered as
+      [gamma_0, beta_0, gamma_1, beta_1, ...].
+
+    Args:
+        problem: Problem instance (e.g., :class:`TSP`, :class:`MaxCut`) that provides
+            the Hamiltonians and, if needed, an initial-state factory.
+        layers (int): Number of QAOA layers (p). Must be positive. [Default 1]
+        delta_beta (float): Ramp scale for beta parameters. [Default 0.3]
+        delta_gamma (float): Ramp scale for gamma parameters. [Default 0.6]
+        cost_hamiltonian: Optional override of the cost Hamiltonian returned by the
+            problem. [Default None]
+        mixer_hamiltonian: Optional override of the mixer Hamiltonian. [Default None]
+        qaoa_kwargs (dict): Extra keyword arguments passed directly to
+            :class:`qibo.models.QAOA`. [Default None]
+    """
+
+    def __init__(
+        self,
+        problem,
+        layers=1,
+        *,
+        delta_beta=0.3,
+        delta_gamma=0.6,
+        cost_hamiltonian=None,
+        mixer_hamiltonian=None,
+        qaoa_kwargs=None,
+    ):
+        super().__init__(
+            problem,
+            layers,
+            cost_hamiltonian=cost_hamiltonian,
+            mixer_hamiltonian=mixer_hamiltonian,
+            qaoa_kwargs=qaoa_kwargs,
+        )
+        self.delta_beta = float(delta_beta)
+        self.delta_gamma = float(delta_gamma)
+
+    def lr_schedule(self, delta_beta=None, delta_gamma=None):
+        """
+        Build the linear-ramp beta and gamma schedules.
+
+        Args:
+            delta_beta (float | None): Override for beta ramp scale.
+            delta_gamma (float | None): Override for gamma ramp scale.
+
+        Returns:
+            tuple[list[float], list[float]]: (gammas, betas) for all layers.
+        """
+        db = self.delta_beta if delta_beta is None else float(delta_beta)
+        dg = self.delta_gamma if delta_gamma is None else float(delta_gamma)
+        p = self.layers
+        betas = [(1.0 - (i / p)) * db for i in range(p)]
+        gammas = [((i + 1) / p) * dg for i in range(p)]
+        return gammas, betas
+
+    def lr_parameters(self, delta_beta=None, delta_gamma=None):
+        """
+        Build interleaved parameters for the linear-ramp schedule.
+
+        Args:
+            delta_beta (float | None): Override for beta ramp scale.
+            delta_gamma (float | None): Override for gamma ramp scale.
+
+        Returns:
+            list[float]: Interleaved parameter list
+                [gamma_0, beta_0, gamma_1, beta_1, ...].
+        """
+        gammas, betas = self.lr_schedule(
+            delta_beta=delta_beta, delta_gamma=delta_gamma
+        )
+        params = []
+        for gamma, beta in zip(gammas, betas):
+            params.extend([gamma, beta])
+        return params
+
+    def _default_angles(self):
+        """
+        Build the default parameter vector for linear-ramp execution.
+
+        Returns:
+            list[float]: Interleaved linear-ramp parameters.
+        """
+        return self.lr_parameters()
+
+    def minimize(self, *args, **kwargs):
+        """
+        Disabled for LR-QAOA.
+
+        Raises:
+            NotImplementedError: LR-QAOA uses fixed parameters; use ``execute`` or
+                ``sweep_deltas`` to select ramps.
+        """
+        raise NotImplementedError(
+            "LR-QAOA uses a fixed linear-ramp schedule; use execute() or sweep_deltas()."
+        )
+
+    def execute(self, parameters=None, initial_state=None, state_kwargs=None):
+        """
+        Execute the QAOA circuit using the linear-ramp schedule by default.
+
+        Args:
+            parameters (iterable | None): Optional parameter vector to load before
+                execution. When omitted, uses the LR interleaved schedule.
+            initial_state (np.ndarray | None): State vector to evolve. If omitted, it
+                is constructed via ``state_kwargs`` and the problem instance.
+            state_kwargs (dict | None): Keyword arguments passed to the problem's
+                ``prepare_initial_state`` when ``initial_state`` is omitted.
+
+        Returns:
+            np.ndarray: Final state prepared by QAOA.
+        """
+        params = parameters if parameters is not None else self.lr_parameters()
+        return super().execute(
+            parameters=params, initial_state=initial_state, state_kwargs=state_kwargs
+        )
+
+    def _coerce_score(self, value):
+        raw = self.cost_hamiltonian.backend.to_numpy(value)
+        arr = np.asarray(raw)
+        if arr.size != 1:
+            raise ValueError("Sweep score must be scalar.")
+        val = arr.item()
+        if isinstance(val, complex):
+            if not np.allclose(val.imag, 0.0, atol=1e-12):
+                raise ValueError("Sweep score has non-zero imaginary component.")
+            val = val.real
+        return float(val)
+
+    def _sweep_values(self, values):
+        if np.isscalar(values):
+            return [float(values)]
+        return [float(v) for v in values]
+
+    def sweep_deltas(
+        self,
+        delta_betas,
+        delta_gammas,
+        *,
+        initial_state=None,
+        state_kwargs=None,
+        score_fn=None,
+        update_best=False,
+    ):
+        """
+        Sweep delta_beta and delta_gamma over a grid and score each run.
+
+        Args:
+            delta_betas (Iterable[float] | float): Candidate beta ramp scales.
+            delta_gammas (Iterable[float] | float): Candidate gamma ramp scales.
+            initial_state (np.ndarray | None): Optional state vector to start from.
+            state_kwargs (dict | None): Keyword arguments forwarded to
+                ``prepare_initial_state`` if ``initial_state`` is omitted.
+            score_fn (callable | None): Optional scoring function. If omitted,
+                uses the cost Hamiltonian expectation value.
+            update_best (bool): When True, update ``delta_beta`` and ``delta_gamma``
+                with the best-performing pair.
+
+        Returns:
+            tuple: ``(best, results)`` where ``best`` is a dict with keys
+            ``delta_beta``, ``delta_gamma``, ``score``, and ``parameters``, and
+            ``results`` is a list of all evaluated entries.
+        """
+        betas = self._sweep_values(delta_betas)
+        gammas = self._sweep_values(delta_gammas)
+        if not betas or not gammas:
+            raise ValueError("Sweep ranges must be non-empty.")
+
+        if initial_state is None:
+            base_state = self._prepare_state(state_kwargs)
+        else:
+            base_state = initial_state
+
+        backend = self.cost_hamiltonian.backend
+        results = []
+        best = None
+        for db in betas:
+            for dg in gammas:
+                params = self.lr_parameters(delta_beta=db, delta_gamma=dg)
+                state = backend.cast(base_state, copy=True)
+                self._qaoa.set_parameters(params)
+                evolved = self._qaoa.execute(state)
+                if score_fn is None:
+                    score = self.cost_hamiltonian.expectation(evolved)
+                else:
+                    score_kwargs = {
+                        "hamiltonian": self.cost_hamiltonian,
+                        "state": evolved,
+                        "delta_beta": db,
+                        "delta_gamma": dg,
+                    }
+                    filtered = {
+                        key: score_kwargs[key]
+                        for key in score_kwargs
+                        if key in score_fn.__code__.co_varnames
+                    }
+                    score = score_fn(**filtered)
+                score_val = self._coerce_score(score)
+                entry = {
+                    "delta_beta": db,
+                    "delta_gamma": dg,
+                    "score": score_val,
+                    "parameters": params,
+                }
+                results.append(entry)
+                if best is None or entry["score"] < best["score"]:
+                    best = entry
+
+        if update_best and best is not None:
+            self.delta_beta = best["delta_beta"]
+            self.delta_gamma = best["delta_gamma"]
+
+        return best, results
