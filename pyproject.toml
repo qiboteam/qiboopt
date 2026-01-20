@@ -36,6 +36,7 @@ pytest = "^8.2.1"
 pytest-cov = "^4.0.0"
 pytest-env = ">=0.8.1"
 pylint = "^3.3.5"
+matplotlib = "^3.9.2"
 
 [tool.pytest.ini_options]
 testpaths = ['tests/']
