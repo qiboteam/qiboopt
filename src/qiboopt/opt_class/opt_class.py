@@ -19,9 +19,9 @@ class QUBO:
     """Initializes a ``QUBO`` class. The ``QUBO`` class can be multiplied by a scalar factor, and multiple ``QUBO``
     instances can be added together.
 
-        Args:
-        offset (float): The constant offset of the QUBO problem.
-        args (dict): Input for parameters for QUBO or Ising formulation. If ``len(args) == 1``,
+    Args:
+        offset (float): Constant offset of the QUBO problem.
+        args (dict): Input parameters for the QUBO or Ising formulation. If ``len(args) == 1``,
             ``args`` has to be a dictionary representing the quadratic coefficient assigned to the ``QUBO.QDict``
             attribute, which represents the :math:`Q` matrix. If ``len(args) == 2``, both objects have to be
             dictionaries representing the inputs :math:`h` and :math:`J` for an Ising formulation.
@@ -32,18 +32,18 @@ class QUBO:
 
                 s'  J  s + h'  s = \\text{offset} + x'  Q x
 
-            where
-                h (dict): Linear biases as a dictionary of the form ``{v: bias, ...}``, where keys are variables of the
-                    model and values are biases.
-                J (dict): Quadratic biases as a dictionary of the form ``{(u, v): bias, ...}``, where keys are
-                    two-tuples of variables of the model and values are biases associated with the interaction between
-                    the pair of variables.
+            where:
+
+            - ``h`` (dict): Linear biases as a dictionary of the form ``{v: bias, ...}``, where keys are variables
+              of the model and values are biases.
+            - ``J`` (dict): Quadratic biases as a dictionary of the form ``{(u, v): bias, ...}``, where keys are
+              two-tuples of variables of the model and values are biases associated with the interaction between the
+              pair of variables.
 
     Example:
         .. testcode::
 
             from qiboopt.opt_class.opt_class import QUBO
-
 
             Qdict1 = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
             qp1 = QUBO(0, Qdict1)

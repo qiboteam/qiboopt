@@ -2,6 +2,7 @@
 Various combinatorial optimisation applications that are commonly formulated as QUBO problems.
 """
 
+import networkx as nx
 import numpy as np
 from qibo import gates
 from qibo.backends import _check_backend
@@ -363,3 +364,354 @@ class MIS:
 
     def __str__(self):
         return self.__class__.__name__
+
+
+def _ensure_weight_matrix(g_or_w):
+    """
+    Accepts either:
+      - a symmetric numpy array (n x n) with zero diagonal, or
+      - a networkx.Graph with optional 'weight' on edges (default 1.0).
+    Returns:
+      W (np.ndarray, shape [n, n]), node_list (list): order of nodes if graph given.
+    """
+    if isinstance(g_or_w, np.ndarray):
+        W = np.array(g_or_w, dtype=float)
+        if W.shape[0] != W.shape[1]:
+            raise ValueError("Weight matrix must be square.")
+        if not np.allclose(W, W.T, atol=1e-12):
+            raise ValueError("Weight matrix must be symmetric for Max-Cut.")
+        np.fill_diagonal(W, 0.0)
+        node_list = list(range(W.shape[0]))
+        return W, node_list
+
+    if isinstance(g_or_w, nx.Graph):
+        nodes = list(g_or_w.nodes())
+        n = len(nodes)
+        idx = {u: i for i, u in enumerate(nodes)}
+        W = np.zeros((n, n), dtype=float)
+        for u, v, data in g_or_w.edges(data=True):
+            w = float(data.get("weight", 1.0))
+            i, j = idx[u], idx[v]
+            if i == j:
+                continue
+            W[i, j] = W[j, i] = w
+        return W, nodes
+
+    raise TypeError("Expected a numpy array or a networkx.Graph.")
+
+
+def _edge_list_from_W(W, tol=1e-12):
+    """Return list of (i,j) with i<j where |W_ij|>tol."""
+    n = W.shape[0]
+    edges = []
+    for i in range(n):
+        for j in range(i + 1, n):
+            if abs(W[i, j]) > tol:
+                edges.append((i, j))
+    return edges
+
+
+# Hamiltonian Builders
+
+
+def _maxcut_phaser(weight_matrix, backend=None, drop_constant=True):
+    """
+    Phase-separator for Max-Cut.
+
+    We use the convention where the classical optimizer MINIMIZES the expectation
+    value of the Hamiltonian. To align this with MAXIMIZING the cut, we drop the
+    constant and use +0.5 * w_ij * Z_i Z_j so that minimizing energy prefers
+    anti-aligned spins on edges (Z_i Z_j -> -1), i.e. larger cuts.
+
+      Original:  H = sum_{i<j} w_ij * (1 - Z_i Z_j)/2
+      Dropping constant => proportional to (+0.5) * sum w_ij * Z_i Z_j
+    """
+    n = weight_matrix.shape[0]
+    form = 0
+    for i in range(n):
+        for j in range(i + 1, n):
+            w = weight_matrix[i, j]
+            if w == 0:
+                continue
+            # keep only the ZZ term by default (constant dropped)
+            form += (0.5 * w) * Z(i) * Z(j)
+            # if you ever want the constant term: add (+0.5*w) to a running scalar
+            # but SymbolicHamiltonian doesn't need it for optimization/QAOA.
+    return SymbolicHamiltonian(form, backend=backend)
+
+
+def _maxcut_mixer(n, mode="x", edges=None, backend=None):
+    """
+    QAOA mixer for Max-Cut.
+
+    Options:
+      - mode='x':  transverse-field mixer H_M = sum_i X_i (default)
+      - mode='xy': edge-based XY mixer H_M = sum_{(i,j) in E} (X_i X_j + Y_i Y_j)
+                    Useful on sparse graphs; requires 'edges' list.
+    """
+    mode = (mode or "x").lower()
+    form = 0
+    if mode == "x":
+        for i in range(n):
+            form += X(i)
+        return SymbolicHamiltonian(form, backend=backend)
+
+    if mode == "xy":
+        if not edges:
+            # Fallback: complete graph if edges not provided
+            edges = [(i, j) for i in range(n) for j in range(i + 1, n)]
+        for i, j in edges:
+            form += X(i) * X(j) + Y(i) * Y(j)
+        return SymbolicHamiltonian(form, backend=backend)
+
+    raise ValueError("mixer must be one of {'x','xy'}.")
+
+
+def _normalize(W, mode):
+    """
+    Normalizes W and returns (W_scaled, scale_factor c).
+
+    mode:
+      - 'none':   no scaling (c = 1).
+                Use when you care about true weights and you're tuning QAOA angles per-instance.
+
+      - 'maxdeg': divide by c = max_i sum_j |W_ij|.
+                Good default for batches of graphs with varying degrees/weight
+                keeps each qubit's local scale ~O(1), so one γ-range works across instances.
+
+      - 'sum':    divide by c = sum_{i<j} |W_ij|.
+                Use for *cross-size/density comparisons* (energy per unit weight)
+                or to improve numeric conditioning when weights are very large.
+
+    Note: Scaling by positive c does NOT change the argmax cut. It only rescales energies
+    (and thus the effective QAOA angle γ).
+    """
+    mode = (mode or "none").lower()
+    if mode == "none":
+        return W.copy(), 1.0
+
+    if mode == "maxdeg":
+        c = np.max(np.sum(np.abs(W), axis=1))
+        if c == 0:
+            c = 1.0
+        return W / c, c
+
+    if mode == "sum":
+        c = np.sum(np.abs(np.triu(W, 1)))
+        if c == 0:
+            c = 1.0
+        return W / c, c
+
+    raise ValueError("normalize must be one of {'none','maxdeg','sum'}.")
+
+
+class MaxCut:
+    """
+    Max-Cut problem (unconstrained) with QUBO and QAOA-ready Hamiltonians.
+
+    Args:
+        graph_or_weights: either a symmetric (n x n) numpy array of weights
+                          or a networkx.Graph with 'weight' on edges (default 1.0).
+        backend: qibo backend; if None uses global backend.
+        normalize: {'none','maxdeg','sum'}
+            - 'none'   : keep true weights; best when reporting real cut values or tuning
+                         γ per instance (single-instance studies).
+            - 'maxdeg' : good default for *batches* with varying degrees/weights; keeps
+                         local scales O(1) so γ-ranges transfer better across instances.
+            - 'sum'    : good for cross-size/density *benchmarking* (energy per unit
+                         total weight) or very large weights (conditioning).
+        mixer: {'x','xy'}
+            - 'x'  : standard transverse-field mixer (cheap, robust default).
+            - 'xy' : pairwise XY on edges; can help exploration on sparse graphs
+                     (costlier; deeper two-qubit circuits).
+
+    Example:
+        .. testcode::
+
+            import numpy as np
+            from qibo.models import QAOA
+
+            W = np.array([
+                [0, 0.8, 0.8, 0.8, 0.8],
+                [0.8, 0, 0.8, 0.8, 0.8],
+                [0.8, 0.8, 0, 0.2, 0.2],
+                [0.8, 0.8, 0.2, 0, 0.2],
+                [0.8, 0.8, 0.2, 0.2, 0]
+            ])
+
+            mc = MaxCut(W)
+            obj_h, mix_h = mc.hamiltonians()
+
+            # QAOA (start from |+>^n)
+            init_state = mc.prepare_initial_state(init="plus")
+
+            qaoa = QAOA(obj_h, mixer=mix_h)
+            best_energy, params, _ = qaoa.minimize(initial_p=[0.1]*2,
+                                                   initial_state=init_state,
+                                                   method='BFGS')
+
+            # Optional: QUBO coefficients for classical solvers
+            qubo = mc.to_qubo()
+            # qubo.q_dict has (i,j) -> coefficient, including diagonals for linear terms.
+    """
+
+    def __init__(self, graph_or_weights, backend=None, normalize="none", mixer="x"):
+        self.backend = _check_backend(backend)
+        self.W_raw, self.nodes = _ensure_weight_matrix(graph_or_weights)
+        self.n = self.W_raw.shape[0]
+
+        # normalization
+        self.W, self.energy_scale = _normalize(self.W_raw, normalize)
+        self.normalize = normalize
+
+        # mixer choice
+        self.mixer_mode = mixer
+        self._edges = _edge_list_from_W(self.W)  # for 'xy' mixer
+
+        # index <-> node mapping
+        self.ind_to_node = {i: u for i, u in enumerate(self.nodes)}
+        self.node_to_ind = {u: i for i, u in enumerate(self.nodes)}
+
+    # Hamiltonians
+    def hamiltonians(self):
+        """
+        Constructs the phaser and mixer Hamiltonians for the Max-Cut problem.
+
+        Returns:
+            tuple: A tuple containing the phaser and mixer Hamiltonians.
+        """
+        return (
+            _maxcut_phaser(self.W, backend=self.backend),
+            _maxcut_mixer(
+                self.n, mode=self.mixer_mode, edges=self._edges, backend=self.backend
+            ),
+        )
+
+    # Initial states
+    def prepare_initial_state(self, init="plus", bitstring=None):
+        """
+        Prepare an initial state for QAOA.
+        Options:
+          - init="plus": |+>^n (Hadamard on all qubits).
+          - init="bitstring": computational basis per 'bitstring' (list/str of 0/1).
+          - init="random": random computational basis (uniform over {0,1}^n).
+
+        Returns:
+            np.ndarray: state vector from backend.execute_circuit(c)
+        """
+        c = Circuit(self.n)
+        if init == "plus":
+            for i in range(self.n):
+                c.add(gates.H(i))
+        elif init == "bitstring":
+            if bitstring is None:
+                raise ValueError("Provide 'bitstring' when init='bitstring'.")
+            bits = [
+                int(b)
+                for b in (
+                    bitstring.strip() if isinstance(bitstring, str) else bitstring
+                )
+            ]
+            if len(bits) != self.n:
+                raise ValueError("Bitstring length must equal number of vertices.")
+            for i, b in enumerate(bits):
+                if b == 1:
+                    c.add(gates.X(i))
+        elif init == "random":
+            rng = np.random.default_rng()
+            for i, b in enumerate(rng.integers(0, 2, size=self.n)):
+                if b == 1:
+                    c.add(gates.X(i))
+        else:
+            raise ValueError("init must be one of {'plus','bitstring','random'}.")
+
+        result = self.backend.execute_circuit(c)
+        return result.state()
+
+    # QUBO
+    def to_qubo(self, maximize=True, use_scaled=False):
+        """
+        QUBO of the cut objective using binary variables x_i ∈ {0,1}:
+          Cut(x) = Σ_{i<j} W_ij [x_i XOR x_j] = Σ W_ij (x_i + x_j - 2 x_i x_j).
+
+        Coefficients:
+          for each i<j:
+            q_{ii} += W_ij
+            q_{jj} += W_ij
+            q_{ij} += -2 W_ij
+
+        Args:
+          maximize (bool): if True (default), flip sign so standard *minimizing*
+            QUBO solvers minimize -Cut. Set False if your solver maximizes.
+          use_scaled (bool): if True, build QUBO with the (normalized) W; if False
+            (default) use the original W so energies are in true units.
+
+        When to use:
+          * use_scaled=True if you want numerical conditioning consistent with the
+            Hamiltonian used in QAOA (e.g., for hybrid workflows).
+          * use_scaled=False if you want the solver’s objective in *original units*.
+        """
+        Wq = self.W if use_scaled else self.W_raw
+        q = {}
+        n = self.n
+        s = -1.0 if maximize else 1.0  # flip sign for minimization solvers
+        for i in range(n):
+            for j in range(i + 1, n):
+                w = Wq[i, j]
+                if w == 0:
+                    continue
+                q[(i, i)] = q.get((i, i), 0.0) + s * w
+                q[(j, j)] = q.get((j, j), 0.0) + s * w
+                q[(i, j)] = q.get((i, j), 0.0) + s * (-2.0 * w)
+        return QUBO(0.0, q)
+
+    # Utilities
+    def cut_value(self, bits, use_scaled=False):
+        """
+        Evaluate the cut weight of a bit assignment.
+
+        Args:
+          bits: list/array/str of 0/1 of length n (1 means S', 0 means S).
+          use_scaled: if True, evaluate under normalized W (for comparisons to
+                      scaled Hamiltonian energies). Otherwise (default), return
+                      the *true* cut weight.
+
+        Returns:
+          float: sum_{i<j} W_ij * [bits_i XOR bits_j]
+        """
+        x = np.array(
+            [int(b) for b in (bits.strip() if isinstance(bits, str) else bits)],
+            dtype=int,
+        )
+        if x.size != self.n:
+            raise ValueError("Assignment length must equal number of vertices.")
+        Wv = self.W if use_scaled else self.W_raw
+        val = 0.0
+        for i in range(self.n):
+            for j in range(i + 1, self.n):
+                if Wv[i, j] == 0:
+                    continue
+                val += Wv[i, j] * (x[i] ^ x[j])
+        return float(val)
+
+    def partition_from_bits(self, bits):
+        """
+        Convert a bitstring to sets S (bit 0) and S' (bit 1) with original node labels.
+        """
+        x = [int(b) for b in (bits.strip() if isinstance(bits, str) else bits)]
+        if len(x) != self.n:
+            raise ValueError("Assignment length must equal number of vertices.")
+        S = {self.ind_to_node[i] for i, b in enumerate(x) if b == 0}
+        Sp = {self.ind_to_node[i] for i, b in enumerate(x) if b == 1}
+        return S, Sp
+
+    # Energy rescaling
+    def rescale_energy(self, E_scaled):
+        """
+        Convert an energy/expectation computed with the *scaled* Hamiltonian
+        back to original units: E_true = energy_scale * E_scaled.
+        """
+        return self.energy_scale * E_scaled
+
+    def __str__(self):
+        return f"{self.__class__.__name__}(n={self.n}, normalize='{self.normalize}', mixer='{self.mixer_mode}')"
