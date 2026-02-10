@@ -1464,6 +1464,10 @@ class CombinatorialLRQAOA(CombinatorialQAOA):
         """
         return self.lr_parameters()
 
+    def _cast_lr_parameters(self, parameters):
+        """Cast LR parameters to backend vector type expected by QAOA."""
+        return self.cost_hamiltonian.backend.cast(parameters, copy=True)
+
     def minimize(self, *args, **kwargs):
         """
         Disabled for LR-QAOA.
@@ -1493,7 +1497,9 @@ class CombinatorialLRQAOA(CombinatorialQAOA):
         """
         params = parameters if parameters is not None else self.lr_parameters()
         return super().execute(
-            parameters=params, initial_state=initial_state, state_kwargs=state_kwargs
+            parameters=self._cast_lr_parameters(params),
+            initial_state=initial_state,
+            state_kwargs=state_kwargs,
         )
 
     def _coerce_score(self, value):
@@ -1559,7 +1565,7 @@ class CombinatorialLRQAOA(CombinatorialQAOA):
             for dg in gammas:
                 params = self.lr_parameters(delta_beta=db, delta_gamma=dg)
                 state = backend.cast(base_state, copy=True)
-                self._qaoa.set_parameters(params)
+                self._qaoa.set_parameters(self._cast_lr_parameters(params))
                 evolved = self._qaoa.execute(state)
                 if score_fn is None:
                     score = self.cost_hamiltonian.expectation(evolved)
