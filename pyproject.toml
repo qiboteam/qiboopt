@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "qiboopt"
-version = "0.0.1"
+version = "0.1.0"
 description = "High level application module for solving combinatorial optimisation problems with Qibo"
 authors = ["The Qibo team"]
 license = "Apache-2.0"
