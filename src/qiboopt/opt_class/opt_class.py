@@ -2,6 +2,7 @@
 Optimisation classes
 """
 
+import inspect
 import itertools
 from collections import defaultdict
 
@@ -13,6 +14,8 @@ from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models import QAOA
 from qibo.optimizers import optimize
 from qibo.symbols import Z
+
+from qiboopt.integrations.qiboml_adapter import optimize_qaoa_with_qiboml
 
 
 class QUBO:
@@ -192,7 +195,9 @@ class QUBO:
             if alpha:
                 circuit.add(gates.RY(i, 2 * alpha))
 
-    def _build(self, gammas, betas, alphas=None, custom_mixer=None):
+    def _build(
+        self, gammas, betas, alphas=None, custom_mixer=None, include_measurements=True
+    ):
         """
         Constructs the full QAOA circuit for the Ising model with p layers.
         custom_mixer (List[:class:`qibo.models.Circuit`]): An optional function that takes as input custom mixers.
@@ -236,7 +241,8 @@ class QUBO:
                 else:
                     self._default_mixer(circuit, betas[layer])
 
-        circuit.add(gates.M(i) for i in range(self.n))
+        if include_measurements:
+            circuit.add(gates.M(i) for i in range(self.n))
 
         return circuit
 
@@ -471,7 +477,14 @@ class QUBO:
         self.Qdict = Qdict
         return self.Qdict
 
-    def qubo_to_qaoa_circuit(self, gammas, betas, alphas=None, custom_mixer=None):
+    def qubo_to_qaoa_circuit(
+        self,
+        gammas,
+        betas,
+        alphas=None,
+        custom_mixer=None,
+        include_measurements=True,
+    ):
         """
         Constructs a QAOA or XQAOA circuit for the given QUBO problem.
 
@@ -483,20 +496,82 @@ class QUBO:
                 If len(custom_mixer) == 1, then use this one circuit as mixer for all layers.
                 If len(custom_mixer) == len(gammas), then use each circuit as mixer for each layer.
                 If len(custom_mixer) != 1 and != len(gammas), raise an error.
+            include_measurements (bool, optional): If ``True``, append measurement gates to all qubits.
+                Defaults to ``True``.
 
         Returns:
             :class:`qibo.models.Circuit`: The QAOA or XQAOA circuit corresponding to the QUBO problem.
         """
         if alphas is not None:  # Use XQAOA, ignore mixer_function
-            circuit = self._build(gammas, betas, alphas)
+            circuit = self._build(
+                gammas, betas, alphas, include_measurements=include_measurements
+            )
         else:
             if custom_mixer:
                 circuit = self._build(
-                    gammas, betas, alphas=None, custom_mixer=custom_mixer
+                    gammas,
+                    betas,
+                    alphas=None,
+                    custom_mixer=custom_mixer,
+                    include_measurements=include_measurements,
                 )
             else:
-                circuit = self._build(gammas, betas)
+                circuit = self._build(
+                    gammas, betas, include_measurements=include_measurements
+                )
         return circuit
+
+    def _split_qaoa_parameters(self, parameters, p, has_alphas=False):
+        """Unpack a flat QAOA parameter vector in block format."""
+        gammas = parameters[:p]
+        betas = parameters[p : 2 * p]
+        unpacked_alphas = parameters[2 * p : 3 * p] if has_alphas else None
+        return gammas, betas, unpacked_alphas
+
+    def qaoa_circuit_from_parameters(
+        self,
+        parameters,
+        p,
+        custom_mixer=None,
+        include_measurements=True,
+        has_alphas=False,
+    ):
+        """Build a QAOA circuit directly from flat block-ordered parameters."""
+        gammas, betas, unpacked_alphas = self._split_qaoa_parameters(
+            parameters, p, has_alphas=has_alphas
+        )
+        return self.qubo_to_qaoa_circuit(
+            gammas=gammas,
+            betas=betas,
+            alphas=unpacked_alphas,
+            custom_mixer=custom_mixer,
+            include_measurements=include_measurements,
+        )
+
+    def make_qaoa_circuit_callable(
+        self, p, custom_mixer=None, has_alphas=False, include_measurements=False
+    ):
+        """Create a fixed-arity callable for qiboml circuit tracing."""
+        nparams = 3 * p if has_alphas else 2 * p
+        param_names = [f"theta_{i}" for i in range(nparams)]
+        signature = inspect.Signature(
+            [
+                inspect.Parameter(name, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+                for name in param_names
+            ]
+        )
+
+        def qaoa_circuit(*angles):
+            return self.qaoa_circuit_from_parameters(
+                parameters=angles,
+                p=p,
+                custom_mixer=custom_mixer,
+                include_measurements=include_measurements,
+                has_alphas=has_alphas,
+            )
+
+        qaoa_circuit.__signature__ = signature
+        return qaoa_circuit
 
     def train_QAOA(
         self,
@@ -512,6 +587,11 @@ class QUBO:
         custom_mixer=None,
         backend=None,
         noise_model=None,
+        engine="legacy",
+        optimizer="adam",
+        lr=0.05,
+        epochs=100,
+        differentiation=None,
     ):
         """
         Constructs the QAOA or XQAOA circuit with optional parameters for the mixers or phases before using a classical
@@ -523,7 +603,8 @@ class QUBO:
             betas  (List[float], optional): parameters for X mixers.
             alphas (List[float], optional): parameters for Y mixers for XQAOA. Defaults to None.
             p (int, optional): number of layers.
-            nshots (int, optional): number of shots
+            nshots (int, optional): Number of shots for sampled execution.
+                If ``None`` or ``0``, uses exact (no-shot) execution.
             regular_loss (Bool, optional): If False, Conditional Variance at Risk (CVaR) is used as cost function.
                 Defaults to True, where expected value is used as cost function.
             maxiter (int, optional): Maximum number of iterations used in the minimiser. Defaults to 10.
@@ -537,6 +618,17 @@ class QUBO:
                 If ``None``, it uses the current backend. Defaults to ``None``.
             noise_model (:class:`qibo.noise.NoiseModel`, optional): noise model applied to simulate noisy computations.
                 Defaults to None.
+            engine (str, optional): Training engine. ``"legacy"`` uses ``qibo.optimizers.optimize``.
+                ``"qiboml"`` uses qiboml's pytorch ``QuantumModel`` training loop. Defaults to ``"legacy"``.
+            optimizer (str, optional): Optimizer name used when ``engine="qiboml"``.
+                Supported values are ``"adam"`` and ``"sgd"``. Defaults to ``"adam"``.
+            lr (float, optional): Learning rate used when ``engine="qiboml"``.
+                Defaults to ``0.05``.
+            epochs (int, optional): Number of optimization steps used when ``engine="qiboml"``.
+                Defaults to ``100``.
+            differentiation (str, optional): Differentiation backend used when ``engine="qiboml"``.
+                Supported values are ``None``, ``"PSR"``, ``"Jax"``, and ``"Adjoint"``.
+                Defaults to ``None``.
 
         Returns:
             Tuple[float, List[float], dict, :class:`qibo.models.Circuit`, dict]: A tuple containing:
@@ -544,7 +636,9 @@ class QUBO:
                 - params (List[float]): Optimised QAOA parameters.
                 - extra (dict): Additional metadata (e.g., convergence info).
                 - circuit (:class:`qibo.models.Circuit`): Final circuit used for evaluation.
-                - frequencies (dict): Bitstring outcome frequencies from measurement.
+                - frequencies (dict): Bitstring outcome statistics.
+                  In sampled mode (``nshots`` > 0), values are counts.
+                  In exact mode (``nshots`` is ``None`` or ``0``), values are probabilities.
 
         Example:
             .. testcode::
@@ -560,6 +654,7 @@ class QUBO:
         """
 
         backend = _check_backend(backend)
+        use_exact = (nshots is None) or (nshots == 0)
 
         if p is None and gammas is None:
             raise_error(
@@ -582,10 +677,51 @@ class QUBO:
 
         self.n_layers = p
         self.num_betas = len(betas)
+        has_alphas = alphas is not None
 
         parameters = list(gammas) + list(betas)
-        if alphas is not None:
+        if has_alphas:
             parameters += list(alphas)
+
+        if engine not in ("legacy", "qiboml"):
+            raise_error(
+                ValueError,
+                f"Unsupported engine '{engine}'. Use 'legacy' or 'qiboml'.",
+            )
+
+        if engine == "qiboml" and regular_loss:
+            best, params, extra = optimize_qaoa_with_qiboml(
+                qubo=self,
+                parameters=parameters,
+                p=p,
+                nshots=nshots,
+                noise_model=noise_model,
+                custom_mixer=custom_mixer,
+                has_alphas=has_alphas,
+                optimizer=optimizer,
+                lr=lr,
+                epochs=epochs,
+                differentiation=differentiation,
+                backend=backend,
+            )
+        else:
+            if engine == "qiboml" and not regular_loss:
+                # qiboml path currently supports expectation-value optimization only.
+                engine = "legacy"
+        if not regular_loss and not (0 < cvar_delta <= 1):
+            raise_error(
+                ValueError,
+                f"cvar_delta must satisfy 0 < cvar_delta <= 1, but got {cvar_delta}.",
+            )
+
+        def _probability_dict_from_state(result):
+            probabilities = np.asarray(result.probabilities()).ravel()
+            return {
+                format(index, f"0{self.n}b"): float(probability)
+                for index, probability in enumerate(probabilities)
+                if probability > 0
+            }
+
         if regular_loss:
 
             def myloss(parameters):
@@ -599,22 +735,21 @@ class QUBO:
                     loss (float): The computed expectation value.
                 """
 
-                p = len(gammas)
-                if alphas is not None:
-                    gammas_ = parameters[:p]
-                    betas_ = parameters[p : 2 * p]
-                    unpacked_alphas = parameters[2 * p : 3 * p]
-                else:
-                    gammas_ = parameters[:p]
-                    betas_ = parameters[p : 2 * p]
-                    unpacked_alphas = None
-                circuit = self.qubo_to_qaoa_circuit(
-                    gammas_, betas_, alphas=unpacked_alphas, custom_mixer=custom_mixer
+                circuit = self.qaoa_circuit_from_parameters(
+                    parameters=parameters,
+                    p=p,
+                    custom_mixer=custom_mixer,
+                    include_measurements=not use_exact,
+                    has_alphas=has_alphas,
                 )
                 if noise_model is not None:
                     circuit = noise_model.apply(circuit)
 
-                result = circuit(None, nshots)
+                if use_exact:
+                    hamiltonian = self.qubo_to_qaoa_object().hamiltonian
+                    return hamiltonian.expectation(circuit, nshots=None)
+
+                result = backend.execute_circuit(circuit, nshots=nshots)
                 result_counter = result.frequencies(binary=True)
                 energy_dict = defaultdict(int)
                 for key in result_counter:
@@ -636,34 +771,37 @@ class QUBO:
                 Returns:
                     cvar (float): The computed CVaR value.
                 """
-                # m = len(parameters)
-                if alphas is not None:
-                    gammas_ = parameters[:p]
-                    betas_ = parameters[p : 2 * p]
-                    unpacked_alphas = parameters[2 * p : 3 * p]
-                else:
-                    gammas_ = parameters[:p]
-                    betas_ = parameters[p : 2 * p]
-                    unpacked_alphas = None
-                circuit = self.qubo_to_qaoa_circuit(
-                    gammas_, betas_, alphas=unpacked_alphas, custom_mixer=custom_mixer
+                circuit = self.qaoa_circuit_from_parameters(
+                    parameters=parameters,
+                    p=p,
+                    custom_mixer=custom_mixer,
+                    include_measurements=not use_exact,
+                    has_alphas=has_alphas,
                 )
                 if noise_model is not None:
                     circuit = noise_model.apply(circuit)
-                result = backend.execute_circuit(circuit, nshots=nshots)
-                result_counter = result.frequencies(binary=True)
+                if use_exact:
+                    result = backend.execute_circuit(circuit)
+                    result_probs = _probability_dict_from_state(result)
+                    energy_probs = defaultdict(float)
+                    for key, probability in result_probs.items():
+                        x = [int(sub_key) for sub_key in key]
+                        energy_probs[self.evaluate_f(x)] += probability
+                else:
+                    result = backend.execute_circuit(circuit, nshots=nshots)
+                    result_counter = result.frequencies(binary=True)
 
-                energy_dict = defaultdict(int)
-                for key in result_counter:
-                    # key is the binary string, value is the frequency
-                    x = [int(sub_key) for sub_key in key]
-                    energy_dict[self.evaluate_f(x)] += result_counter[key]
+                    energy_dict = defaultdict(int)
+                    for key in result_counter:
+                        # key is the binary string, value is the frequency
+                        x = [int(sub_key) for sub_key in key]
+                        energy_dict[self.evaluate_f(x)] += result_counter[key]
 
-                # Normalize frequencies to probabilities
-                total_counts = sum(energy_dict.values())
-                energy_probs = {
-                    key: value / total_counts for key, value in energy_dict.items()
-                }
+                    # Normalize frequencies to probabilities
+                    total_counts = sum(energy_dict.values())
+                    energy_probs = {
+                        key: value / total_counts for key, value in energy_dict.items()
+                    }
 
                 # Sort energies and compute cumulative probability
                 sorted_energies = sorted(
@@ -686,29 +824,27 @@ class QUBO:
                 cvar = sum(energy * prob for energy, prob in selected_energies) / delta
                 return cvar
 
-        best, params, extra = optimize(
-            myloss, parameters, method=method, options={"maxiter": maxiter}
-        )
-        # Unpack optimised parameters in the same way as in myloss (block format)
-        if alphas is not None:
-            optimised_gammas = params[:p]
-            optimised_betas = params[p : 2 * p]
-            optimised_alphas = params[2 * p : 3 * p]
-        else:
-            optimised_gammas = params[:p]
-            optimised_betas = params[p : 2 * p]
-            optimised_alphas = None
-        circuit = self.qubo_to_qaoa_circuit(
-            gammas=optimised_gammas,
-            betas=optimised_betas,
-            alphas=optimised_alphas,
+        if engine == "legacy":
+            best, params, extra = optimize(
+                myloss, parameters, method=method, options={"maxiter": maxiter}
+            )
+        circuit = self.qaoa_circuit_from_parameters(
+            parameters=params,
+            p=p,
             custom_mixer=custom_mixer,
+            include_measurements=not use_exact,
+            has_alphas=has_alphas,
         )
         original_circuit = Circuit.copy(circuit)
         if noise_model is not None:
             circuit = noise_model.apply(circuit)
 
-        result = backend.execute_circuit(circuit, nshots=nshots)
+        if use_exact:
+            result = backend.execute_circuit(circuit)
+            statistics = _probability_dict_from_state(result)
+        else:
+            result = backend.execute_circuit(circuit, nshots=nshots)
+            statistics = result.frequencies(binary=True)
 
         if noise_model is not None:
             return (
@@ -716,10 +852,10 @@ class QUBO:
                 params,
                 extra,
                 circuit,
-                result.frequencies(binary=True),
+                statistics,
                 original_circuit,
             )
-        return best, params, extra, circuit, result.frequencies(binary=True)
+        return best, params, extra, circuit, statistics
 
     def qubo_to_qaoa_object(self, params: list = None):
         """
