@@ -10,7 +10,12 @@ packages = [{include="qiboopt", from="src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.10,<3.14"
-qibo = "^0.2"
+qibo = ">=0.2,<0.3"
+qiboml = {version = ">=0.1", optional = true}
+torch = {version = "^2.7.0", optional = true}
+
+[tool.poetry.extras]
+qiboml = ["qiboml", "torch"]
 
 [build-system]
 requires = ["poetry-core"]
@@ -37,6 +42,13 @@ pytest-cov = "^4.0.0"
 pytest-env = ">=0.8.1"
 pylint = "^3.3.5"
 matplotlib = "^3.9.2"
+
+[tool.poetry.group.qiboml]
+optional = true
+
+[tool.poetry.group.qiboml.dependencies]
+qiboml = ">=0.1"
+torch = "^2.7.0"
 
 [tool.pytest.ini_options]
 testpaths = ['tests/']
