@@ -2,8 +2,8 @@
 Optimisation classes
 """
 
-import itertools
 import inspect
+import itertools
 from collections import defaultdict
 
 import numpy as np
@@ -14,6 +14,7 @@ from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models import QAOA
 from qibo.optimizers import optimize
 from qibo.symbols import Z
+
 from qiboopt.integrations.qiboml_adapter import optimize_qaoa_with_qiboml
 
 
@@ -524,11 +525,7 @@ class QUBO:
         """Unpack a flat QAOA parameter vector in block format."""
         gammas = parameters[:p]
         betas = parameters[p : 2 * p]
-        unpacked_alphas = (
-            parameters[2 * p : 3 * p]
-            if has_alphas
-            else None
-        )
+        unpacked_alphas = parameters[2 * p : 3 * p] if has_alphas else None
         return gammas, betas, unpacked_alphas
 
     def qaoa_circuit_from_parameters(

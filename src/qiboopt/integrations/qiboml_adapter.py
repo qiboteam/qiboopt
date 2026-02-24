@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any
 
 import numpy as np
 
@@ -13,10 +13,10 @@ def _energy_shift(qubo) -> float:
     return float(constant)
 
 
-def _get_differentiation_class(name: Optional[str]):
-    if name is None or name == 'torch':
+def _get_differentiation_class(name: str | None):
+    if name is None or name == "torch":
         return None
-    from qiboml.operations.differentiation import Adjoint, Jax, PSR
+    from qiboml.operations.differentiation import PSR, Adjoint, Jax
 
     mapping = {
         "psr": PSR,
@@ -38,16 +38,16 @@ def optimize_qaoa_with_qiboml(
     qubo,
     parameters,
     p: int,
-    nshots: Optional[int],
+    nshots: int | None,
     noise_model,
     custom_mixer,
     has_alphas: bool,
     optimizer: str,
     lr: float,
     epochs: int,
-    differentiation: Optional[str],
+    differentiation: str | None,
     backend,
-) -> tuple[float, np.ndarray, Dict[str, Any]]:
+) -> tuple[float, np.ndarray, dict[str, Any]]:
     """Optimize QAOA parameters using qiboml's pytorch interface."""
     try:
         import torch
@@ -101,7 +101,9 @@ def optimize_qaoa_with_qiboml(
     elif optimizer_name == "sgd":
         torch_optimizer = torch.optim.SGD(model.parameters(), lr=lr)
     else:
-        raise ValueError("Unsupported optimizer for qiboml engine. Use 'adam' or 'sgd'.")
+        raise ValueError(
+            "Unsupported optimizer for qiboml engine. Use 'adam' or 'sgd'."
+        )
 
     losses = []
     best = float("inf")
