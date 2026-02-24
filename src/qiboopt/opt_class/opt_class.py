@@ -523,7 +523,8 @@ class QUBO:
             betas  (List[float], optional): parameters for X mixers.
             alphas (List[float], optional): parameters for Y mixers for XQAOA. Defaults to None.
             p (int, optional): number of layers.
-            nshots (int, optional): number of shots
+            nshots (int, optional): Number of shots for sampled execution.
+                If ``None`` or ``0``, uses exact (no-shot) execution.
             regular_loss (Bool, optional): If False, Conditional Variance at Risk (CVaR) is used as cost function.
                 Defaults to True, where expected value is used as cost function.
             maxiter (int, optional): Maximum number of iterations used in the minimiser. Defaults to 10.
@@ -544,7 +545,9 @@ class QUBO:
                 - params (List[float]): Optimised QAOA parameters.
                 - extra (dict): Additional metadata (e.g., convergence info).
                 - circuit (:class:`qibo.models.Circuit`): Final circuit used for evaluation.
-                - frequencies (dict): Bitstring outcome frequencies from measurement.
+                - frequencies (dict): Bitstring outcome statistics.
+                  In sampled mode (``nshots`` > 0), values are counts.
+                  In exact mode (``nshots`` is ``None`` or ``0``), values are probabilities.
 
         Example:
             .. testcode::
@@ -560,6 +563,7 @@ class QUBO:
         """
 
         backend = _check_backend(backend)
+        use_exact = (nshots is None) or (nshots == 0)
 
         if p is None and gammas is None:
             raise_error(
@@ -614,7 +618,11 @@ class QUBO:
                 if noise_model is not None:
                     circuit = noise_model.apply(circuit)
 
-                result = circuit(None, nshots)
+                if use_exact:
+                    hamiltonian = self.qubo_to_qaoa_object().hamiltonian
+                    return hamiltonian.expectation(circuit, nshots=None)
+
+                result = backend.execute_circuit(circuit, nshots=nshots)
                 result_counter = result.frequencies(binary=True)
                 energy_dict = defaultdict(int)
                 for key in result_counter:
@@ -650,20 +658,28 @@ class QUBO:
                 )
                 if noise_model is not None:
                     circuit = noise_model.apply(circuit)
-                result = backend.execute_circuit(circuit, nshots=nshots)
-                result_counter = result.frequencies(binary=True)
+                if use_exact:
+                    result = backend.execute_circuit(circuit)
+                    result_probs = _probability_dict_from_state(result)
+                    energy_probs = defaultdict(float)
+                    for key, probability in result_probs.items():
+                        x = [int(sub_key) for sub_key in key]
+                        energy_probs[self.evaluate_f(x)] += probability
+                else:
+                    result = backend.execute_circuit(circuit, nshots=nshots)
+                    result_counter = result.frequencies(binary=True)
 
-                energy_dict = defaultdict(int)
-                for key in result_counter:
-                    # key is the binary string, value is the frequency
-                    x = [int(sub_key) for sub_key in key]
-                    energy_dict[self.evaluate_f(x)] += result_counter[key]
+                    energy_dict = defaultdict(int)
+                    for key in result_counter:
+                        # key is the binary string, value is the frequency
+                        x = [int(sub_key) for sub_key in key]
+                        energy_dict[self.evaluate_f(x)] += result_counter[key]
 
-                # Normalize frequencies to probabilities
-                total_counts = sum(energy_dict.values())
-                energy_probs = {
-                    key: value / total_counts for key, value in energy_dict.items()
-                }
+                    # Normalize frequencies to probabilities
+                    total_counts = sum(energy_dict.values())
+                    energy_probs = {
+                        key: value / total_counts for key, value in energy_dict.items()
+                    }
 
                 # Sort energies and compute cumulative probability
                 sorted_energies = sorted(
@@ -708,7 +724,12 @@ class QUBO:
         if noise_model is not None:
             circuit = noise_model.apply(circuit)
 
-        result = backend.execute_circuit(circuit, nshots=nshots)
+        if use_exact:
+            result = backend.execute_circuit(circuit)
+            statistics = _probability_dict_from_state(result)
+        else:
+            result = backend.execute_circuit(circuit, nshots=nshots)
+            statistics = result.frequencies(binary=True)
 
         if noise_model is not None:
             return (
@@ -719,7 +740,7 @@ class QUBO:
                 result.frequencies(binary=True),
                 original_circuit,
             )
-        return best, params, extra, circuit, result.frequencies(binary=True)
+        return best, params, extra, circuit, statistics
 
     def qubo_to_qaoa_object(self, params: list = None):
         """
