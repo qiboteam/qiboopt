@@ -1,7 +1,7 @@
+import importlib.util
 import json
 import os
 import sys
-import importlib.util
 from pathlib import Path
 
 import pytest
