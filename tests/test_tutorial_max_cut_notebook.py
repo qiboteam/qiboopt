@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import importlib.util
 from pathlib import Path
 
 import pytest
@@ -43,10 +44,29 @@ def _should_skip(code: str) -> bool:
     return False
 
 
+def _requires_qiboml(cells: list[str]) -> bool:
+    markers = (
+        'engine="qiboml"',
+        "engine='qiboml'",
+        'engine = "qiboml"',
+        "engine = 'qiboml'",
+    )
+    return any(any(marker in code for marker in markers) for code in cells)
+
+
+def _has_working_qiboml_runtime() -> bool:
+    if importlib.util.find_spec("torch") is None:
+        return False
+    if importlib.util.find_spec("qiboml") is None:
+        return False
+    return True
+
+
 @pytest.mark.parametrize(
     "notebook_rel",
     [
         Path("tutorial") / "Max-Cut.ipynb",
+        Path("tutorial") / "Max-Cut-qiboml.ipynb",
     ],
 )
 def test_execute_notebook_for_coverage(notebook_rel: Path):
@@ -63,11 +83,20 @@ def test_execute_notebook_for_coverage(notebook_rel: Path):
     # Use non-interactive matplotlib backend for headless test envs
     os.environ.setdefault("MPLBACKEND", "Agg")
 
+    cells = _load_notebook_cells(nb_path)
+
+    # qiboml tutorial variants should skip cleanly when optional deps are unavailable.
+    if _requires_qiboml(cells):
+        if not _has_working_qiboml_runtime():
+            pytest.skip(
+                "qiboml notebook requires a working qiboml+torch runtime compatible with this qibo install."
+            )
+
     # Minimal execution namespace; mimic a fresh notebook kernel
     ns: dict = {"__name__": "__main__"}
 
     # Execute cells, skipping heavy visualization/magic cells
-    for code in _load_notebook_cells(nb_path):
+    for code in cells:
         if _should_skip(code):
             continue
         # Some notebooks assume cwd at repo root; enforce it

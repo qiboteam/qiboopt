@@ -1,4 +1,5 @@
 import itertools
+import importlib.util
 
 import numpy as np
 import pytest
@@ -14,6 +15,17 @@ from qiboopt.opt_class.opt_class import (
     variable_dict_to_ind_dict,
     variable_to_ind,
 )
+
+
+def _qiboml_available():
+    if importlib.util.find_spec("qiboml") is None:
+        return False
+    if importlib.util.find_spec("torch") is None:
+        return False
+    return True
+
+
+ENGINES = ["legacy"] + (["qiboml"] if _qiboml_available() else [])
 
 
 def test_initialization():
@@ -235,6 +247,17 @@ def test_qubo_to_qaoa_circuit(gammas, betas, alphas):
     assert circuit.nqubits == qubo.n
 
 
+def test_qubo_to_qaoa_circuit_without_measurements():
+    qubo = QUBO(0, {0: 1, 1: -1}, {(0, 1): 0.5})
+    circuit = qubo.qubo_to_qaoa_circuit(
+        gammas=[0.1, 0.2],
+        betas=[0.3, 0.4],
+        include_measurements=False,
+    )
+    assert isinstance(circuit, Circuit)
+    assert len(circuit.measurements) == 0
+
+
 @pytest.mark.parametrize(
     "gammas, betas",
     [
@@ -295,7 +318,8 @@ def test_qubo_to_qaoa_svp_mixer(gammas, betas):
     ],
 )
 @pytest.mark.parametrize("noise_model", [(True, False)])
-def test_train_QAOA(gammas, betas, alphas, reg_loss, cvar_delta, noise_model):
+@pytest.mark.parametrize("engine", ENGINES)
+def test_train_QAOA(gammas, betas, alphas, reg_loss, cvar_delta, noise_model, engine):
     h = {0: 1, 1: -1}
     J = {(0, 1): 0.5}
     qubo = QUBO(0, h, J)
@@ -312,6 +336,8 @@ def test_train_QAOA(gammas, betas, alphas, reg_loss, cvar_delta, noise_model):
         regular_loss=reg_loss,
         cvar_delta=cvar_delta,
         noise_model=noise_model,
+        engine=engine,
+        epochs=5,
     )
     assert isinstance(result[0], float)
     assert isinstance(result[1], np.ndarray)
@@ -319,7 +345,8 @@ def test_train_QAOA(gammas, betas, alphas, reg_loss, cvar_delta, noise_model):
     assert isinstance(result[4], dict)
 
 
-def test_train_QAOA_convex_qubo():
+@pytest.mark.parametrize("engine", ENGINES)
+def test_train_QAOA_convex_qubo(engine):
 
     Qdict = {(0, 0): 2.0, (1, 1): 2.0}
 
@@ -331,7 +358,7 @@ def test_train_QAOA_convex_qubo():
 
     # Train QAOA with 100 iterations. Should be enough to find the minimum.
     best, params, extra, circuit, freqs = qp.train_QAOA(
-        gammas, betas, nshots=1000, maxiter=100
+        gammas, betas, nshots=1000, maxiter=100, engine=engine, epochs=50
     )
     # Convert result keys to bitstrings
     most_freq = max(freqs, key=freqs.get)
@@ -358,6 +385,42 @@ def test_train_QAOA_edge_cases():
     assert isinstance(result[1], np.ndarray)
     assert isinstance(result[3], Circuit)
     assert isinstance(result[4], dict)
+
+
+@pytest.mark.parametrize("nshots", [None, 0])
+@pytest.mark.parametrize("regular_loss", [True, False])
+def test_train_qaoa_exact_mode_returns_probabilities(nshots, regular_loss):
+    qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
+    kwargs = {}
+    if not regular_loss:
+        kwargs["cvar_delta"] = 0.5
+    best, params, extra, circuit, stats = qp.train_QAOA(
+        gammas=[0.1, 0.2],
+        betas=[0.2, 0.3],
+        nshots=nshots,
+        regular_loss=regular_loss,
+        maxiter=5,
+        engine="legacy",
+        **kwargs,
+    )
+    assert np.isfinite(best)
+    assert isinstance(params, np.ndarray)
+    assert isinstance(extra, dict)
+    assert isinstance(circuit, Circuit)
+    assert isinstance(stats, dict)
+    assert all(isinstance(value, float) for value in stats.values())
+    assert np.isclose(sum(stats.values()), 1.0)
+
+
+def test_train_qaoa_cvar_delta_validation():
+    qp = QUBO(0, {(0, 0): 1.0})
+    with pytest.raises(ValueError, match="cvar_delta must satisfy 0 < cvar_delta <= 1"):
+        qp.train_QAOA(
+            gammas=[0.1],
+            betas=[0.2],
+            regular_loss=False,
+            cvar_delta=0.0,
+        )
 
 
 def create_svp_mixer(name_to_index, beta):
