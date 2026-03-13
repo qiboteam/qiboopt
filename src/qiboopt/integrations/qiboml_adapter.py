@@ -69,7 +69,8 @@ def optimize_qaoa_with_qiboml(
     # Reuse qiboopt's own QAOA-object construction path for the Hamiltonian.
     hamiltonian = qubo.qubo_to_qaoa_object().hamiltonian
     if not hasattr(hamiltonian, "expectation_from_circuit"):
-        # qiboml 0.1.0 calls this method on SymbolicHamiltonian.
+        # TODO: remove once minimum required qiboml version is > 0.1.0.
+        # qiboml 0.1.0 uses `expectation_from_circuit`; older builds expose only `expectation`.
         hamiltonian.expectation_from_circuit = hamiltonian.expectation
     circuit_builder = qubo.make_qaoa_circuit_callable(
         p=p,
@@ -95,15 +96,21 @@ def optimize_qaoa_with_qiboml(
     )
     model = model.to(dtype=torch.float64)
 
-    optimizer_name = optimizer.lower()
-    if optimizer_name == "adam":
-        torch_optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    elif optimizer_name == "sgd":
-        torch_optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    if isinstance(optimizer, str):
+        _OPT_MAP = {
+            "adam": torch.optim.Adam,
+            "sgd": torch.optim.SGD,
+        }
+        opt_cls = _OPT_MAP.get(optimizer.lower())
+        if opt_cls is None:
+            raise ValueError(
+                f"Unknown optimizer string '{optimizer}'. "
+                f"Pass a torch.optim.Optimizer subclass directly, or use one of: {list(_OPT_MAP)}."
+            )
     else:
-        raise ValueError(
-            "Unsupported optimizer for qiboml engine. Use 'adam' or 'sgd'."
-        )
+        opt_cls = optimizer  # user supplied a class directly
+
+    torch_optimizer = opt_cls(model.parameters(), lr=lr)
 
     losses = []
     best = float("inf")
@@ -123,7 +130,7 @@ def optimize_qaoa_with_qiboml(
 
     extra = {
         "engine": "qiboml",
-        "optimizer": optimizer_name,
+        "optimizer": getattr(opt_cls, "__name__", str(opt_cls)),
         "learning_rate": lr,
         "epochs": epochs,
         "loss_history": losses,

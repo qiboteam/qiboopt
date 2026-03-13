@@ -704,10 +704,16 @@ class QUBO:
                 differentiation=differentiation,
                 backend=backend,
             )
-        else:
-            if engine == "qiboml" and not regular_loss:
-                # qiboml path currently supports expectation-value optimization only.
-                engine = "legacy"
+        if engine == "qiboml" and not regular_loss:
+            import warnings
+
+            warnings.warn(
+                "engine='qiboml' does not yet support CVaR loss (regular_loss=False). "
+                "Falling back to engine='legacy'.",
+                UserWarning,
+                stacklevel=2,
+            )
+            engine = "legacy"
         if not regular_loss and not (0 < cvar_delta <= 1):
             raise_error(
                 ValueError,
