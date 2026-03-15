@@ -387,6 +387,56 @@ def test_train_QAOA_edge_cases():
     assert isinstance(result[4], dict)
 
 
+def test_train_qaoa_unsupported_engine_raises():
+    qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
+    with pytest.raises(ValueError, match="Unsupported engine"):
+        qp.train_QAOA(gammas=[0.1], betas=[0.2], engine="invalid")
+
+
+def test_train_qaoa_qiboml_cvar_fallback_warns():
+    qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
+    with pytest.warns(UserWarning, match="CVaR loss"):
+        best, params, extra, circuit, stats = qp.train_QAOA(
+            gammas=[0.1, 0.2],
+            betas=[0.2, 0.3],
+            nshots=20,
+            regular_loss=False,
+            cvar_delta=0.5,
+            engine="qiboml",
+            maxiter=5,
+        )
+    assert np.isfinite(best)
+    assert isinstance(params, np.ndarray)
+    assert isinstance(extra, dict)
+    assert isinstance(circuit, Circuit)
+    assert isinstance(stats, dict)
+
+
+def test_train_qaoa_with_noise_model_returns_original_circuit():
+    qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
+    noise_model = NoiseModel()
+    noise_model.add(DepolarizingError(0.05))
+
+    result = qp.train_QAOA(
+        gammas=[0.1, 0.2],
+        betas=[0.2, 0.3],
+        nshots=20,
+        noise_model=noise_model,
+        maxiter=5,
+        engine="legacy",
+    )
+
+    assert len(result) == 6
+    best, params, extra, circuit, stats, original_circuit = result
+    assert np.isfinite(best)
+    assert isinstance(params, np.ndarray)
+    assert isinstance(extra, dict)
+    assert isinstance(circuit, Circuit)
+    assert isinstance(stats, dict)
+    assert isinstance(original_circuit, Circuit)
+    assert circuit is not original_circuit
+
+
 @pytest.mark.parametrize("nshots", [None, 0])
 @pytest.mark.parametrize("regular_loss", [True, False])
 def test_train_qaoa_exact_mode_returns_probabilities(nshots, regular_loss):
