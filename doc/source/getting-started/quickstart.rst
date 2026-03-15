@@ -59,3 +59,31 @@ The Conditional Variance at Risk (CVaR) can also be used as an alternative loss 
    gammas = [0.1, 0.2]
    betas = [0.3, 0.4]
    output = qp.train_QAOA(gammas=gammas, betas=betas, regular_loss=False, cvar_delta=0.1)
+
+To use qiboml's pytorch training loop instead of the legacy optimizer, set ``engine="qiboml"``:
+
+.. code-block:: python
+
+   from qiboopt.opt_class.opt_class import QUBO
+   gammas = [0.1, 0.2]
+   betas = [0.3, 0.4]
+   output = qp.train_QAOA(
+      gammas=gammas,
+      betas=betas,
+      engine="qiboml",
+      optimizer="adam",
+      lr=0.05,
+      epochs=100,
+   )
+
+You can also run in exact (no-shot) mode by setting ``nshots=None`` (or ``nshots=0``):
+
+.. code-block:: python
+
+   from qiboopt.opt_class.opt_class import QUBO
+   gammas = [0.1, 0.2]
+   betas = [0.3, 0.4]
+   output = qp.train_QAOA(gammas=gammas, betas=betas, nshots=None)
+
+In sampled mode (``nshots > 0``), the returned dictionary contains bitstring counts.
+In exact mode (``nshots is None`` or ``nshots == 0``), it contains exact bitstring probabilities.
