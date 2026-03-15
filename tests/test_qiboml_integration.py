@@ -85,10 +85,13 @@ def test_optimize_qaoa_with_qiboml_raises_when_torch_missing(monkeypatch):
 
 def test_optimize_qaoa_with_qiboml_raises_when_qiboml_missing(monkeypatch):
     original_import = builtins.__import__
+    fake_torch = SimpleNamespace()
 
     def _mocked_import(name, globals=None, locals=None, fromlist=(), level=0):
         if name.startswith("qiboml"):
             raise ImportError("mocked missing qiboml")
+        if name == "torch":
+            return fake_torch
         return original_import(name, globals, locals, fromlist, level)
 
     monkeypatch.setattr(builtins, "__import__", _mocked_import)
