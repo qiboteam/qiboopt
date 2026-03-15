@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 import numpy as np
@@ -16,12 +17,21 @@ def _energy_shift(qubo) -> float:
 def _get_differentiation_class(name: str | None):
     if name is None or name == "torch":
         return None
-    from qiboml.operations.differentiation import PSR, Adjoint, Jax
+
+    try:
+        differentiation_module = importlib.import_module(
+            "qiboml.operations.differentiation"
+        )
+    except ImportError as exc:
+        raise ImportError(
+            "engine='qiboml' differentiation backend requires "
+            "`qiboml.operations.differentiation`."
+        ) from exc
 
     mapping = {
-        "psr": PSR,
-        "jax": Jax,
-        "adjoint": Adjoint,
+        "psr": differentiation_module.PSR,
+        "jax": differentiation_module.Jax,
+        "adjoint": differentiation_module.Adjoint,
         "torch": None,
     }
     diff = mapping.get(name.lower())
@@ -126,7 +136,12 @@ def optimize_qaoa_with_qiboml(
         losses.append(loss_value)
         if loss_value < best:
             best = loss_value
-            best_params = model.circuit_parameters.detach().cpu().numpy().copy()
+            current_parameters = model.circuit_parameters
+            detach_fn = getattr(current_parameters, "detach", None)
+            if callable(detach_fn):
+                current_parameters = detach_fn()
+                current_parameters = current_parameters.cpu().numpy()
+            best_params = np.asarray(current_parameters, dtype=np.float64).copy()
 
     extra = {
         "engine": "qiboml",

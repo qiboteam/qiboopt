@@ -689,21 +689,6 @@ class QUBO:
                 f"Unsupported engine '{engine}'. Use 'legacy' or 'qiboml'.",
             )
 
-        if engine == "qiboml" and regular_loss:
-            best, params, extra = optimize_qaoa_with_qiboml(
-                qubo=self,
-                parameters=parameters,
-                p=p,
-                nshots=nshots,
-                noise_model=noise_model,
-                custom_mixer=custom_mixer,
-                has_alphas=has_alphas,
-                optimizer=optimizer,
-                lr=lr,
-                epochs=epochs,
-                differentiation=differentiation,
-                backend=backend,
-            )
         if engine == "qiboml" and not regular_loss:
             import warnings
 
@@ -830,10 +815,26 @@ class QUBO:
                 cvar = sum(energy * prob for energy, prob in selected_energies) / delta
                 return cvar
 
-        if engine == "legacy":
+        if engine == "qiboml":
+            best, params, extra = optimize_qaoa_with_qiboml(
+                qubo=self,
+                parameters=parameters,
+                p=p,
+                nshots=nshots,
+                noise_model=noise_model,
+                custom_mixer=custom_mixer,
+                has_alphas=has_alphas,
+                optimizer=optimizer,
+                lr=lr,
+                epochs=epochs,
+                differentiation=differentiation,
+                backend=backend,
+            )
+        else:
             best, params, extra = optimize(
                 myloss, parameters, method=method, options={"maxiter": maxiter}
             )
+
         circuit = self.qaoa_circuit_from_parameters(
             parameters=params,
             p=p,
