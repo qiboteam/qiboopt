@@ -1,17 +1,23 @@
-import importlib.util
 import builtins
+import importlib.util
 from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
-from qiboopt.integrations.qiboml_adapter import _energy_shift, _get_differentiation_class
-from qiboopt.integrations.qiboml_adapter import optimize_qaoa_with_qiboml
+from qiboopt.integrations.qiboml_adapter import (
+    _energy_shift,
+    _get_differentiation_class,
+    optimize_qaoa_with_qiboml,
+)
 from qiboopt.opt_class.opt_class import QUBO
 
 
 def _qiboml_available():
-    return importlib.util.find_spec("qiboml") is not None and importlib.util.find_spec("torch") is not None
+    return (
+        importlib.util.find_spec("qiboml") is not None
+        and importlib.util.find_spec("torch") is not None
+    )
 
 
 def test_get_differentiation_class_none_and_torch_return_none():
@@ -23,7 +29,10 @@ def test_get_differentiation_class_import_error(monkeypatch):
     def _raise_import_error(_name):
         raise ImportError("mocked import failure")
 
-    monkeypatch.setattr("qiboopt.integrations.qiboml_adapter.importlib.import_module", _raise_import_error)
+    monkeypatch.setattr(
+        "qiboopt.integrations.qiboml_adapter.importlib.import_module",
+        _raise_import_error,
+    )
 
     with pytest.raises(ImportError, match="differentiation backend requires"):
         _get_differentiation_class("psr")
