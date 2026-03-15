@@ -1,6 +1,5 @@
 import importlib.util
 import itertools
-import importlib.util
 
 import numpy as np
 import pytest
