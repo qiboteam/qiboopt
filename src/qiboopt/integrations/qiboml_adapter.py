@@ -138,7 +138,9 @@ def optimize_qaoa_with_qiboml(
             best = loss_value
             current_parameters = model.circuit_parameters
             if isinstance(current_parameters, torch.Tensor):
-                current_parameters = current_parameters.detach().cpu().numpy()  # pylint: disable=not-callable
+                current_parameters = (
+                    current_parameters.detach().cpu().numpy()
+                )  # pylint: disable=not-callable
             best_params = np.asarray(current_parameters, dtype=np.float64).copy()
 
     extra = {
