@@ -5,4 +5,4 @@ try:
 except Exception:
     __version__ = "0.0.1"
 
-from qiboopt import combinatorial, continuous_bandits, integrations, opt_class
+from . import combinatorial, integrations, opt_class
