@@ -9,6 +9,7 @@ from qibo.backends import _check_backend
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models.circuit import Circuit
 from qibo.symbols import X, Y, Z
+import copy
 
 from qiboopt.opt_class.opt_class import (
     QUBO,
@@ -364,6 +365,75 @@ class MIS:
 
     def __str__(self):
         return self.__class__.__name__
+
+
+class QAP:
+    def __init__(self, flow_matrix, distance_matrix, two_to_one=None):
+        self.distance_matrix = distance_matrix
+        if distance_matrix.shape[0] != flow_matrix.shape[0]:
+            print("check the input matrices, size not compatible")
+        self.num_cities = distance_matrix.shape[0]
+        self.two_to_one, _ = (
+            _calculate_two_to_one(self.num_cities) if two_to_one is None else two_to_one
+        )
+        q_dict = {
+            (
+                self.two_to_one[(i, k)],
+                self.two_to_one[(j, l)],
+            ): self.flow_matrix[i, j] * self.distance_matrix[k, l]
+            for i in range(self.num_cities)
+            for j in range(self.num_cities)
+            for k in range(self.num_cities)
+            for l in range(self.num_cities)
+        }
+        self.qp = QUBO(0, q_dict)
+
+
+    def penalty_method(self, penalty):
+        qp = copy.copy(self.qp) # copy the original copy so that we do not change the constructed QUBO again
+        # row constraints
+        for v in range(self.num_cities):
+            row_constraint = [0 for _ in range(self.num_cities**2)]
+            for j in range(self.num_cities):
+                row_constraint[self.two_to_one[(v, j)]] = 1
+            lp = LinearProblem(row_constraint, -1)
+            tmp_qp = lp.square()
+            tmp_qp = tmp_qp * penalty
+            qp = qp + tmp_qp
+
+        # column constraints
+        for j in range(self.num_cities):
+            col_constraint = [0 for _ in range(self.num_cities**2)]
+            for v in range(self.num_cities):
+                col_constraint[self.two_to_one[(v, j)]] = 1
+            lp = LinearProblem(col_constraint, -1)
+            tmp_qp = lp.square()
+            tmp_qp = tmp_qp * penalty
+            qp = qp + tmp_qp
+        return qp
+
+
+class MVC:
+    def __init__(self, graph):
+        self.graph = graph
+        q_dict ={}
+        for v in self.graph:
+            q_dict[(v,v)] = 1
+        self.qp = QUBO(0, q_dict)
+
+    def penalty_method(self, penalty=2):
+        constraint_dict = {}
+        constant = 0
+        for u, v in self.graph.edges:
+            if u > v:
+                u, v = v, u
+            constraint_dict[(u,u)] = constraint_dict.get((u,u), 0) - 1
+            constraint_dict[(v,v)] = constraint_dict.get((v,v), 0) - 1
+            constraint_dict[(u,v)] = constraint_dict.get((u,v), 0) + 1
+            constant += 1
+        constraint_qp = QUBO(constant, constraint_dict)
+        constraint_qp = penalty * constraint_qp
+        return self.constraint_qp + self.qp
 
 
 def _ensure_weight_matrix(g_or_w):

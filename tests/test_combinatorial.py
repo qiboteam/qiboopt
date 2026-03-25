@@ -8,6 +8,8 @@ from test_models_variational import assert_regression_fixture
 from qiboopt.combinatorial.combinatorial import (
     MIS,
     TSP,
+    QAP,
+    MVC,
     MaxCut,
     _calculate_two_to_one,
     _edge_list_from_W,
@@ -444,6 +446,20 @@ def test_mis_class():
 
     mis_str = str(mis)
     assert mis_str == "MIS", "MIS.__str__ did not return the expected string"
+
+
+def test_qap():
+    f = np.array([[0,1], [1, 0]], dtype=float)
+    d = np.array([[0,2], [2,0]], dtype=float)
+    qap = QAP(f, d)
+    answer = np.array([[0, 0, 0, 2], [0, 0, 2, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
+    assert np.array_equal(qap.qp.Qdict, answer)
+    penalized_qap = qap.penalty_method(2)
+    assert penalized_qap.Qdict[0][1] != 0
+
+
+
+
 
 
 def test_maxcut_helper_functions():
