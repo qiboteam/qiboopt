@@ -466,7 +466,7 @@ class MWVC:
                 g = nx.Graph()
                 g.add_nodes_from([(0, {"weight":2}), (1, {"weight":3}), (2, {"weight":4})])
                 g.add_edges_from([(0,1), (1,2), (2,1)])
-                mwvc = MWVC(flow_matrix, distance_matrix)
+                mwvc = MWVC(g)
                 penalty = 10
                 qp = mwvc.penalty_method(penalty)
         """
