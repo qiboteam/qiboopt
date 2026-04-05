@@ -466,6 +466,20 @@ def test_qap():
     assert penalized_qap.Qdict[(0, 1)] != 0
 
 
+def test_qap_mismatched_shapes():
+    f = np.array([[0, 1], [1, 0]], dtype=float)
+    d = np.array([[0, 2, 1], [2, 0, 3], [1, 3, 0]], dtype=float)  # 3x3 vs 2x2
+    with pytest.raises(ValueError, match="same shape"):
+        QAP(f, d)
+
+
+def test_qap_non_square():
+    f = np.array([[0, 1, 2], [1, 0, 3]], dtype=float)  # 2x3, not square
+    d = np.array([[0, 1, 2], [1, 0, 3]], dtype=float)
+    with pytest.raises(ValueError, match="square"):
+        QAP(f, d)
+
+
 def test_mwvc():
     g = nx.Graph()
     g.add_nodes_from([(0, {"weight": 2}), (1, {"weight": 3}), (2, {"weight": 4})])

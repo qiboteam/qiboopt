@@ -394,8 +394,15 @@ class QAP:
     def __init__(self, flow_matrix, distance_matrix, two_to_one=None):
         self.distance_matrix = distance_matrix
         self.flow_matrix = flow_matrix
-        if distance_matrix.shape[0] != flow_matrix.shape[0]:
-            print("check the input matrices, size not compatible")
+        if distance_matrix.shape != flow_matrix.shape:
+            raise ValueError(
+                f"Input matrices must have the same shape. "
+                f"Got flow_matrix: {flow_matrix.shape}, distance_matrix: {distance_matrix.shape}"
+            )
+        if distance_matrix.shape[0] != distance_matrix.shape[1]:
+            raise ValueError(
+                f"Matrices must be square. Got shape: {distance_matrix.shape}"
+            )
         self.num_cities = distance_matrix.shape[0]
         self.two_to_one, _ = (
             _calculate_two_to_one(self.num_cities) if two_to_one is None else two_to_one
