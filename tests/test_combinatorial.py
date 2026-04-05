@@ -461,7 +461,8 @@ def test_qap():
     answer[(2, 1)] = 2.0
     answer[(3, 0)] = 2.0
     assert qap.qp.Qdict == answer
-    penalized_qap = qap.penalty_method(2)
+    penalty_value = qap.suggest_penalty()
+    penalized_qap = qap.penalty_method(penalty_value)
     assert penalized_qap.Qdict[(0, 1)] != 0
 
 
@@ -475,7 +476,7 @@ def test_mwvc():
         and mwvc.qp.Qdict[(1, 1)] == 3
         and mwvc.qp.Qdict[2, 2] == 4
     )
-    penalty = 10
+    penalty = mwvc.suggest_penalty(0.01)
     qp = mwvc.penalty_method(penalty)
     assert qp.Qdict[(0, 1)] != 0
 

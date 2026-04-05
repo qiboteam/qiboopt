@@ -511,7 +511,7 @@ class MWVC:
         Args:
             epsilon: a positive number that should be a small positive number, serving as a perturbation
         """
-        return max([v["weight"] for v in self.graph.nodes]) + epsilon
+        return max([self.graph.nodes[v]["weight"] for v in self.graph.nodes]) + epsilon
 
 
 def _ensure_weight_matrix(g_or_w):
