@@ -2,6 +2,8 @@
 Various combinatorial optimisation applications that are commonly formulated as QUBO problems.
 """
 
+import copy
+
 import networkx as nx
 import numpy as np
 from qibo import gates
@@ -9,7 +11,6 @@ from qibo.backends import _check_backend
 from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models.circuit import Circuit
 from qibo.symbols import X, Y, Z
-import copy
 
 from qiboopt.opt_class.opt_class import (
     QUBO,
@@ -369,28 +370,29 @@ class MIS:
 
 class QAP:
     """
-        Class for representing the Quadratic Assignment Problem (QAP) problem.
+    Class for representing the Quadratic Assignment Problem (QAP) problem.
 
-        The QAP problem assigns a set of facilities to a set of locations in a way that minimises the total cost.
+    The QAP problem assigns a set of facilities to a set of locations in a way that minimises the total cost.
 
-        Args:
-            flow_matrix: a numpy array describing the flows between the factories.
-            distance_matrix: a numpy array describing the distance between the locations
-            two_to_one (optional): a mapping from 2-index to a single index.
+    Args:
+        flow_matrix: a numpy array describing the flows between the factories.
+        distance_matrix: a numpy array describing the distance between the locations
+        two_to_one (optional): a mapping from 2-index to a single index.
 
-        Example:
-            .. testcode::
+    Example:
+        .. testcode::
 
 
-                from qiboopt.combinatorial.combinatorial import QAP
+            from qiboopt.combinatorial.combinatorial import QAP
 
-                g = nx.Graph()
-                flow_matrix = np.array([[1, 2],[3, 4]])
-                distance_matrix = np.aray([[4, 3],[2, 1]])
-                qap = QAP(flow_matrix, distance_matrix)
-                penalty = 10
-                qp = qap.penalty_method(penalty)
-        """
+            g = nx.Graph()
+            flow_matrix = np.array([[1, 2],[3, 4]])
+            distance_matrix = np.aray([[4, 3],[2, 1]])
+            qap = QAP(flow_matrix, distance_matrix)
+            penalty = 10
+            qp = qap.penalty_method(penalty)
+    """
+
     def __init__(self, flow_matrix, distance_matrix, two_to_one=None):
         self.distance_matrix = distance_matrix
         self.flow_matrix = flow_matrix
@@ -404,7 +406,8 @@ class QAP:
             (
                 self.two_to_one[(i, k)],
                 self.two_to_one[(j, l)],
-            ): self.flow_matrix[i, j] * self.distance_matrix[k, l]
+            ): self.flow_matrix[i, j]
+            * self.distance_matrix[k, l]
             for i in range(self.num_cities)
             for j in range(self.num_cities)
             for k in range(self.num_cities)
@@ -412,12 +415,13 @@ class QAP:
         }
         self.qp = QUBO(0, q_dict)
 
-
     def penalty_method(self, penalty):
         """
         construct the QUBO instance when the penalty method is being used.
         """
-        qp = copy.copy(self.qp) # copy the original copy so that we do not change the constructed QUBO again
+        qp = copy.copy(
+            self.qp
+        )  # copy the original copy so that we do not change the constructed QUBO again
         # row constraints
         for v in range(self.num_cities):
             row_constraint = [0 for _ in range(self.num_cities**2)]
@@ -444,37 +448,42 @@ class QAP:
         This function suggest a penalty coefficient for a QAP instance. Currently, we use the dimension multiplied by
         the maximum of flow and maximum of the distance matrix. This is a heuristic.
         """
-        return self.flow_matrix.shape[0] * np.max(np.abs(self.flow_matrix)) * np.max(np.abs(self.distance_matrix))
+        return (
+            self.flow_matrix.shape[0]
+            * np.max(np.abs(self.flow_matrix))
+            * np.max(np.abs(self.distance_matrix))
+        )
 
 
 class MWVC:
     """
-        Class for representing the Minimum Weighted Vectex Cover (MWVC) problem.
+    Class for representing the Minimum Weighted Vectex Cover (MWVC) problem.
 
-        The MWVC problem selects a subset of vertices in a graph such that every edge in the graph is incident to at
-        least one selected vertex.
+    The MWVC problem selects a subset of vertices in a graph such that every edge in the graph is incident to at
+    least one selected vertex.
 
-        Args:
-            graph: a networkx graph where the weight is encoded with keyword "weight".
+    Args:
+        graph: a networkx graph where the weight is encoded with keyword "weight".
 
-        Example:
-            .. testcode::
+    Example:
+        .. testcode::
 
-                import networkx as nx
-                from qiboopt.combinatorial.combinatorial import MWVC
+            import networkx as nx
+            from qiboopt.combinatorial.combinatorial import MWVC
 
-                g = nx.Graph()
-                g.add_nodes_from([(0, {"weight":2}), (1, {"weight":3}), (2, {"weight":4})])
-                g.add_edges_from([(0,1), (1,2), (2,1)])
-                mwvc = MWVC(g)
-                penalty = 10
-                qp = mwvc.penalty_method(penalty)
-        """
+            g = nx.Graph()
+            g.add_nodes_from([(0, {"weight":2}), (1, {"weight":3}), (2, {"weight":4})])
+            g.add_edges_from([(0,1), (1,2), (2,1)])
+            mwvc = MWVC(g)
+            penalty = 10
+            qp = mwvc.penalty_method(penalty)
+    """
+
     def __init__(self, graph):
         self.graph = graph
-        q_dict ={}
+        q_dict = {}
         for v in self.graph.nodes:
-            q_dict[(v,v)] =v['weight']
+            q_dict[(v, v)] = self.graph.nodes[v]["weight"]
         self.qp = QUBO(0, q_dict)
 
     def penalty_method(self, penalty=2):
@@ -489,9 +498,9 @@ class MWVC:
         for u, v in self.graph.edges:
             if u > v:
                 u, v = v, u
-            constraint_dict[(u,u)] = constraint_dict.get((u,u), 0) - 1
-            constraint_dict[(v,v)] = constraint_dict.get((v,v), 0) - 1
-            constraint_dict[(u,v)] = constraint_dict.get((u,v), 0) + 1
+            constraint_dict[(u, u)] = constraint_dict.get((u, u), 0) - 1
+            constraint_dict[(v, v)] = constraint_dict.get((v, v), 0) - 1
+            constraint_dict[(u, v)] = constraint_dict.get((u, v), 0) + 1
             constant += 1
         constraint_qp = QUBO(constant, constraint_dict)
         constraint_qp = penalty * constraint_qp

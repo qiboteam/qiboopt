@@ -7,9 +7,9 @@ from test_models_variational import assert_regression_fixture
 
 from qiboopt.combinatorial.combinatorial import (
     MIS,
-    TSP,
-    QAP,
     MWVC,
+    QAP,
+    TSP,
     MaxCut,
     _calculate_two_to_one,
     _edge_list_from_W,
@@ -449,13 +449,20 @@ def test_mis_class():
 
 
 def test_qap():
-    f = np.array([[0,1], [1, 0]], dtype=float)
-    d = np.array([[0,2], [2,0]], dtype=float)
+    f = np.array([[0, 1], [1, 0]], dtype=float)
+    d = np.array([[0, 2], [2, 0]], dtype=float)
     qap = QAP(f, d)
-    answer = np.array([[0, 0, 0, 2], [0, 0, 2, 0], [0, 0, 0, 0], [0, 0, 0, 0]])
-    assert np.array_equal(qap.qp.Qdict, answer)
+    answer = dict()
+    for i in range(4):
+        for j in range(4):
+            answer[(i, j)] = 0.0
+    answer[(0, 3)] = 2.0
+    answer[(1, 2)] = 2.0
+    answer[(2, 1)] = 2.0
+    answer[(3, 0)] = 2.0
+    assert qap.qp.Qdict == answer
     penalized_qap = qap.penalty_method(2)
-    assert penalized_qap.Qdict[0][1] != 0
+    assert penalized_qap.Qdict[(0, 1)] != 0
 
 
 def test_mwvc():
@@ -463,13 +470,14 @@ def test_mwvc():
     g.add_nodes_from([(0, {"weight": 2}), (1, {"weight": 3}), (2, {"weight": 4})])
     g.add_edges_from([(0, 1), (1, 2), (2, 1)])
     mwvc = MWVC(g)
+    assert (
+        mwvc.qp.Qdict[(0, 0)] == 2
+        and mwvc.qp.Qdict[(1, 1)] == 3
+        and mwvc.qp.Qdict[2, 2] == 4
+    )
     penalty = 10
     qp = mwvc.penalty_method(penalty)
-    print(qp.Qdict)
-
-
-
-
+    assert qp.Qdict[(0, 1)] != 0
 
 
 def test_maxcut_helper_functions():
