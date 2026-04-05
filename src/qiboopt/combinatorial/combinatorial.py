@@ -382,10 +382,8 @@ class QAP:
     Example:
         .. testcode::
 
-
             from qiboopt.combinatorial.combinatorial import QAP
 
-            g = nx.Graph()
             flow_matrix = np.array([[1, 2],[3, 4]])
             distance_matrix = np.aray([[4, 3],[2, 1]])
             qap = QAP(flow_matrix, distance_matrix)
