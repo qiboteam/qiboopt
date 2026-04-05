@@ -480,6 +480,20 @@ def test_qap_non_square():
         QAP(f, d)
 
 
+def test_qap_custom_two_to_one():
+    """Test that a custom two_to_one mapping is used instead of the default."""
+    f = np.array([[0, 1], [1, 0]], dtype=float)
+    d = np.array([[0, 2], [2, 0]], dtype=float)
+
+    num_cities = 2
+    custom_mapping = {
+        (i, j): i * num_cities + j for i in range(num_cities) for j in range(num_cities)
+    }
+    qap = QAP(f, d, two_to_one=(custom_mapping, None))
+
+    assert qap.two_to_one == custom_mapping
+
+
 def test_mwvc():
     g = nx.Graph()
     g.add_nodes_from([(0, {"weight": 2}), (1, {"weight": 3}), (2, {"weight": 4})])
