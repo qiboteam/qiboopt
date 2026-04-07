@@ -501,8 +501,6 @@ class MWVC:
         constraint_dict = {}
         constant = 0
         for u, v in self.graph.edges:
-            if u > v:
-                u, v = v, u
             constraint_dict[(u, u)] = constraint_dict.get((u, u), 0) - 1
             constraint_dict[(v, v)] = constraint_dict.get((v, v), 0) - 1
             constraint_dict[(u, v)] = constraint_dict.get((u, v), 0) + 1
