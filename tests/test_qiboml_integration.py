@@ -128,7 +128,9 @@ def test_legacy_engine_does_not_require_qiboml(monkeypatch):
     def _should_not_be_called(**kwargs):
         raise AssertionError("qiboml adapter should not be called for legacy engine")
 
-    monkeypatch.setattr(adapter_module, "optimize_qaoa_with_qiboml", _should_not_be_called)
+    monkeypatch.setattr(
+        adapter_module, "optimize_qaoa_with_qiboml", _should_not_be_called
+    )
     qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
     best, params, extra, circuit, freqs = qp.train_QAOA(
         gammas=[0.1, 0.2],
