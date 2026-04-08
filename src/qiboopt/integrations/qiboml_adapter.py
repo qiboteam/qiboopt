@@ -32,7 +32,6 @@ def _get_differentiation_class(name: str | None):
         "psr": differentiation_module.PSR,
         "jax": differentiation_module.Jax,
         "adjoint": differentiation_module.Adjoint,
-        "torch": None,
     }
     diff = mapping.get(name.lower())
     if diff is None:
@@ -107,17 +106,22 @@ def optimize_qaoa_with_qiboml(
     model = model.to(dtype=torch.float64)
 
     if isinstance(optimizer, str):
-        _OPT_MAP = {
+        opt_map = {
             "adam": torch.optim.Adam,
             "sgd": torch.optim.SGD,
         }
-        opt_cls = _OPT_MAP.get(optimizer.lower())
+        opt_cls = opt_map.get(optimizer.lower())
         if opt_cls is None:
             raise ValueError(
                 f"Unknown optimizer string '{optimizer}'. "
-                f"Pass a torch.optim.Optimizer subclass directly, or use one of: {list(_OPT_MAP)}."
+                f"Pass a torch.optim.Optimizer subclass directly, or use one of: {list(opt_map)}."
             )
     else:
+        if not callable(optimizer):
+            raise ValueError(
+                f"optimizer must be a string ('adam', 'sgd') or a callable "
+                f"torch.optim.Optimizer subclass, got {type(optimizer)!r}."
+            )
         opt_cls = optimizer  # user supplied a class directly
 
     torch_optimizer = opt_cls(model.parameters(), lr=lr)
@@ -129,9 +133,7 @@ def optimize_qaoa_with_qiboml(
         torch_optimizer.zero_grad()
         loss = model()
         if loss.ndim > 0:
-            loss = loss.reshape(-1)[0]
-        loss.backward()
-        torch_optimizer.step()
+            loss = loss.squeeze()
         loss_value = float(loss.detach().cpu().item()) + energy_shift
         losses.append(loss_value)
         if loss_value < best:
@@ -141,6 +143,8 @@ def optimize_qaoa_with_qiboml(
                 # pylint: disable-next=not-callable
                 current_parameters = current_parameters.detach().cpu().numpy()
             best_params = np.asarray(current_parameters, dtype=np.float64).copy()
+        loss.backward()
+        torch_optimizer.step()
 
     extra = {
         "engine": "qiboml",
