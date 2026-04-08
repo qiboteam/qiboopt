@@ -123,12 +123,12 @@ def test_optimize_qaoa_with_qiboml_raises_when_qiboml_missing(monkeypatch):
 
 
 def test_legacy_engine_does_not_require_qiboml(monkeypatch):
-    import qiboopt.opt_class.opt_class as opt_module
+    import qiboopt.integrations.qiboml_adapter as adapter_module
 
     def _should_not_be_called(**kwargs):
         raise AssertionError("qiboml adapter should not be called for legacy engine")
 
-    monkeypatch.setattr(opt_module, "optimize_qaoa_with_qiboml", _should_not_be_called)
+    monkeypatch.setattr(adapter_module, "optimize_qaoa_with_qiboml", _should_not_be_called)
     qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
     best, params, extra, circuit, freqs = qp.train_QAOA(
         gammas=[0.1, 0.2],
@@ -182,12 +182,13 @@ def test_qiboml_engine_updates_parameters():
 
 
 @pytest.mark.skipif(not _qiboml_available(), reason="qiboml/torch not installed")
-def test_qiboml_engine_supports_exact_mode():
+@pytest.mark.parametrize("nshots", [None, 0])
+def test_qiboml_engine_supports_exact_mode(nshots):
     qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
     best, params, extra, circuit, stats = qp.train_QAOA(
         gammas=[0.1, 0.2],
         betas=[0.2, 0.3],
-        nshots=None,
+        nshots=nshots,
         engine="qiboml",
         optimizer="adam",
         lr=0.05,
