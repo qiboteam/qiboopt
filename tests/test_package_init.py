@@ -11,7 +11,7 @@ def test_qiboopt_version_fallback(monkeypatch):
     monkeypatch.setattr(
         im,
         "version",
-        lambda _package: (_ for _ in ()).throw(RuntimeError("missing metadata")),
+        lambda _package: (_ for _ in ()).throw(im.PackageNotFoundError("qiboopt")),
     )
     importlib.reload(qiboopt)
 
