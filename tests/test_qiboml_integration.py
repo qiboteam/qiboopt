@@ -238,6 +238,20 @@ def test_qiboml_engine_unknown_optimizer_raises():
 
 
 @pytest.mark.skipif(not _qiboml_available(), reason="qiboml/torch not installed")
+def test_qiboml_engine_noncallable_optimizer_raises():
+    qp = QUBO(0, {(0, 0): 2.0, (1, 1): 2.0})
+    with pytest.raises(ValueError, match="optimizer must be a string"):
+        qp.train_QAOA(
+            gammas=[0.1, 0.2],
+            betas=[0.2, 0.3],
+            nshots=100,
+            engine="qiboml",
+            optimizer=42,
+            epochs=5,
+        )
+
+
+@pytest.mark.skipif(not _qiboml_available(), reason="qiboml/torch not installed")
 def test_qiboml_engine_accepts_optimizer_class():
     import torch
 
