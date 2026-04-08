@@ -15,8 +15,6 @@ from qibo.models import QAOA
 from qibo.optimizers import optimize
 from qibo.symbols import Z
 
-from qiboopt.integrations.qiboml_adapter import optimize_qaoa_with_qiboml
-
 
 class QUBO:
     """Initializes a ``QUBO`` class. The ``QUBO`` class can be multiplied by a scalar factor, and multiple ``QUBO``
@@ -689,6 +687,11 @@ class QUBO:
                 f"Unsupported engine '{engine}'. Use 'legacy' or 'qiboml'.",
             )
 
+        if not regular_loss and not (0 < cvar_delta <= 1):
+            raise_error(
+                ValueError,
+                f"cvar_delta must satisfy 0 < cvar_delta <= 1, but got {cvar_delta}.",
+            )
         if engine == "qiboml" and not regular_loss:
             import warnings
 
@@ -699,11 +702,6 @@ class QUBO:
                 stacklevel=2,
             )
             engine = "legacy"
-        if not regular_loss and not (0 < cvar_delta <= 1):
-            raise_error(
-                ValueError,
-                f"cvar_delta must satisfy 0 < cvar_delta <= 1, but got {cvar_delta}.",
-            )
 
         def _probability_dict_from_state(result):
             probabilities = np.asarray(result.probabilities()).ravel()
@@ -712,6 +710,9 @@ class QUBO:
                 for index, probability in enumerate(probabilities)
                 if probability > 0
             }
+
+        if use_exact:
+            _hamiltonian = self.qubo_to_qaoa_object().hamiltonian
 
         if regular_loss:
 
@@ -737,8 +738,7 @@ class QUBO:
                     circuit = noise_model.apply(circuit)
 
                 if use_exact:
-                    hamiltonian = self.qubo_to_qaoa_object().hamiltonian
-                    return hamiltonian.expectation(circuit, nshots=None)
+                    return _hamiltonian.expectation(circuit, nshots=None)
 
                 result = backend.execute_circuit(circuit, nshots=nshots)
                 result_counter = result.frequencies(binary=True)
@@ -816,6 +816,8 @@ class QUBO:
                 return cvar
 
         if engine == "qiboml":
+            from qiboopt.integrations.qiboml_adapter import optimize_qaoa_with_qiboml
+
             best, params, extra = optimize_qaoa_with_qiboml(
                 qubo=self,
                 parameters=parameters,
