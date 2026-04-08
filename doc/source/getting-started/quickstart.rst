@@ -65,6 +65,7 @@ To use qiboml's pytorch training loop instead of the legacy optimizer, set ``eng
 .. code-block:: python
 
    from qiboopt.opt_class.opt_class import QUBO
+   qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
    gammas = [0.1, 0.2]
    betas = [0.3, 0.4]
    output = qp.train_QAOA(
