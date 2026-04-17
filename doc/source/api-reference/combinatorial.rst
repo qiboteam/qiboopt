@@ -27,9 +27,33 @@ In this module, the TSP class follows `Hadfield's 2017 paper <https://arxiv.org/
 Quadratic Assignment Problem
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Quadratic Assignment Problem, commonly abbreviated as QAP, is a NP-hard problem in combinatorial optimisation.
+The Quadratic Assignment Problem, commonly abbreviated as QAP, is a NP-hard problem in combinatorial optimisation, first introduced by Koopmans and Beckmann. 
 
-Briefly, the problem concerns assigning a set of facilities to a set of locations in a way that minimises the total cost. The cost is typically determined by the flow between facilities and the distance between their assigned locations. QAP is usually formulated using two matrices: one representing flows between facilities and another representing distances between locations.
+Briefly, the problem concerns assigning a set of facilities to a set of locations in a way that minimises the total assignment cost. The assignment cost is typically determined by the flow between facilities and the distance between their assigned locations. QAP is usually formulated using two matrices: one representing flows between facilities and another representing distances between locations.
+
+To map QAO to a QUBO, we define binary variables :math:`x \in \{0, 1\}`, where 1 denotes if the :math:`i`-th facility is assigned to the :math:`j`-th location and 0 otherwise. 
+
+The objective function is
+
+.. math::
+    \min \sum_{i,k=1}^{n} \sum_{j,l=1}^{n} f_{ik} \, d_{jl} \, x_{ij} \, x_{kl}
+
+subject to the assignment constraints
+
+.. math::
+
+    \sum_{k=1}^{n} x_{ik} = 1 \quad \forall i \in \{1,\dots,n\}
+
+and 
+
+.. math::
+
+    \sum_{i=1}^{n} x_{ik} = 1 \quad \forall k \in \{1,\dots,n\}
+
+where :math:`f_{ik}` are the elements of the flow matrix :math:`F \in \mathbb{R}^{n \times n}`,
+representing the interaction between facilities :math:`i` and :math:`k`, and :math:`d_{jl}` are
+the elements of the distance matrix :math:`D \in \mathbb{R}^{n \times n}`, representing the
+distance between locations :math:`j` and :math:`l`.
 
 .. autoclass:: qiboopt.combinatorial.combinatorial.QAP
     :members:
@@ -40,10 +64,10 @@ Briefly, the problem concerns assigning a set of facilities to a set of location
 Minimum Vertex Cover
 ^^^^^^^^^^^^^^^^^^^^
 
-The Minimum Vertex Cover Problem, commonly abbreviated as MVC, is a NP-hard problem in combinatorial optimisation.
-Briefly, the problem involves selecting a subset of vertices in a graph such that every edge in the graph is incident to at least one selected vertex. The objective is typically to minimise the number of selected vertices. MVC is usually formulated as a graph problem where nodes represent entities and edges represent relationships between them.
+The Minimum Weighted Vertex Cover Problem, commonly abbreviated as MWVC, is a NP-hard problem in combinatorial optimisation.
+Briefly, the problem involves selecting a subset of vertices in a graph such that every edge in the graph is incident to at least one selected vertex. Each vertex is assigned a weight and the objective is to minimise the total weight of the selected vertices (rather than their count). MWVC is usually formulated as a graph problem where nodes represent entities and edges represent relationships between them.
 
-.. autoclass:: qiboopt.combinatorial.combinatorial.MVC
+.. autoclass:: qiboopt.combinatorial.combinatorial.MWVC
     :members:
     :member-order: bysource
 

@@ -370,14 +370,14 @@ class MIS:
 
 class QAP:
     """
-    Class for representing the Quadratic Assignment Problem (QAP) problem.
+    Class for representing the Quadratic Assignment Problem (QAP).
 
-    The QAP problem assigns a set of facilities to a set of locations in a way that minimises the total cost.
+    The QAP assigns a set of facilities to a set of locations in a way that minimises the total assignment cost.
 
     Args:
-        flow_matrix: a numpy array describing the flows between the factories.
-        distance_matrix: a numpy array describing the distance between the locations
-        two_to_one (optional): a mapping from 2-index to a single index.
+        flow_matrix: An :math:`(n,n)` numpy array describing the flows between the facilities.
+        distance_matrix: A :math:`(n,n)` numpy array describing the distance between the locations
+        two_to_one (optional): Mapping from 2-index to a single index.
 
     Example:
         .. testcode::
@@ -462,7 +462,7 @@ class QAP:
 
 class MWVC:
     """
-    Class for representing the Minimum Weighted Vectex Cover (MWVC) problem.
+    Class for representing the Minimum Weighted Vertex Cover (MWVC) problem.
 
     The MWVC problem selects a subset of vertices in a graph such that every edge in the graph is incident to at
     least one selected vertex.
