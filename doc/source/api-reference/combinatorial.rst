@@ -61,16 +61,28 @@ distance between locations :math:`j` and :math:`l`.
 
 .. _MVC:
 
-Minimum Vertex Cover
-^^^^^^^^^^^^^^^^^^^^
+Minimum Weighted Vertex Cover
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 The Minimum Weighted Vertex Cover Problem, commonly abbreviated as MWVC, is a NP-hard problem in combinatorial optimisation.
+
 Briefly, the problem involves selecting a subset of vertices in a graph such that every edge in the graph is incident to at least one selected vertex. Each vertex is assigned a weight and the objective is to minimise the total weight of the selected vertices (rather than their count). MWVC is usually formulated as a graph problem where nodes represent entities and edges represent relationships between them.
+
+Given a graph :math:`G = (V, E)`, the goal of MWVC is to select a subset of vertices in
+such a way that every edge is covered while minimising total vertex weight.
+
+Define binary variables :math:`x_i \in \{0, 1\}` for each vertex :math:`i \in V`, where :math:`x_i = 1` indicates that vertex :math:`i` is selected and 0 otherwise.
+
+To map MWVC to a QUBO, constraints are enforced via penalty terms:
+
+.. math::
+    \min \sum_{i \in V} w_i x_i + P \sum_{(i,j) \in E} (1 - x_i - x_j)^2
+
+where :math:`w_i` is the weight of vertex :math:`i` and :math:`P` is a sufficiently large penalty coefficient enforcing coverage.
 
 .. autoclass:: qiboopt.combinatorial.combinatorial.MWVC
     :members:
     :member-order: bysource
-
 
 .. _MIS:
 
