@@ -27,11 +27,11 @@ In this module, the TSP class follows `Hadfield's 2017 paper <https://arxiv.org/
 Quadratic Assignment Problem
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-The Quadratic Assignment Problem, commonly abbreviated as QAP, is a NP-hard problem in combinatorial optimisation, first introduced by Koopmans and Beckmann. 
+The Quadratic Assignment Problem, commonly abbreviated as QAP, is a NP-hard problem in combinatorial optimisation, first introduced by Koopmans and Beckmann.
 
 Briefly, the problem concerns assigning a set of facilities to a set of locations in a way that minimises the total assignment cost. The assignment cost is typically determined by the flow between facilities and the distance between their assigned locations. QAP is usually formulated using two matrices: one representing flows between facilities and another representing distances between locations.
 
-To map QAO to a QUBO, we define binary variables :math:`x \in \{0, 1\}`, where 1 denotes if the :math:`i`-th facility is assigned to the :math:`j`-th location and 0 otherwise. 
+To map QAO to a QUBO, we define binary variables :math:`x \in \{0, 1\}`, where 1 denotes if the :math:`i`-th facility is assigned to the :math:`j`-th location and 0 otherwise.
 
 The objective function is
 
@@ -44,7 +44,7 @@ subject to the assignment constraints
 
     \sum_{k=1}^{n} x_{ik} = 1 \quad \forall i \in \{1,\dots,n\}
 
-and 
+and
 
 .. math::
 
