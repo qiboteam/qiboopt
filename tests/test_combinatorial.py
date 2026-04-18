@@ -7,6 +7,8 @@ from test_models_variational import assert_regression_fixture
 
 from qiboopt.combinatorial.combinatorial import (
     MIS,
+    MWVC,
+    QAP,
     TSP,
     MaxCut,
     _calculate_two_to_one,
@@ -444,6 +446,68 @@ def test_mis_class():
 
     mis_str = str(mis)
     assert mis_str == "MIS", "MIS.__str__ did not return the expected string"
+
+
+def test_qap():
+    f = np.array([[0, 1], [1, 0]], dtype=float)
+    d = np.array([[0, 2], [2, 0]], dtype=float)
+    qap = QAP(f, d)
+    answer = dict()
+    for i in range(4):
+        for j in range(4):
+            answer[(i, j)] = 0.0
+    answer[(0, 3)] = 2.0
+    answer[(1, 2)] = 2.0
+    answer[(2, 1)] = 2.0
+    answer[(3, 0)] = 2.0
+    assert qap.qp.Qdict == answer
+    penalty_value = qap.suggest_penalty()
+    penalized_qap = qap.penalty_method(penalty_value)
+    assert penalized_qap.Qdict[(0, 1)] != 0
+
+
+def test_qap_mismatched_shapes():
+    f = np.array([[0, 1], [1, 0]], dtype=float)
+    d = np.array([[0, 2, 1], [2, 0, 3], [1, 3, 0]], dtype=float)  # 3x3 vs 2x2
+    with pytest.raises(ValueError, match="same shape"):
+        QAP(f, d)
+
+
+def test_qap_non_square():
+    f = np.array([[0, 1, 2], [1, 0, 3]], dtype=float)  # 2x3, not square
+    d = np.array([[0, 1, 2], [1, 0, 3]], dtype=float)
+    with pytest.raises(ValueError, match="square"):
+        QAP(f, d)
+
+
+def test_qap_custom_two_to_one():
+    """Test that a custom two_to_one mapping is used instead of the default."""
+    f = np.array([[0, 1], [1, 0]], dtype=float)
+    d = np.array([[0, 2], [2, 0]], dtype=float)
+
+    num_cities = 2
+    custom_mapping = {
+        (i, j): i * num_cities + j for i in range(num_cities) for j in range(num_cities)
+    }
+    custom_two_to_one = (custom_mapping, None)
+    qap = QAP(f, d, two_to_one=custom_two_to_one)
+
+    assert qap.two_to_one == custom_mapping
+
+
+def test_mwvc():
+    g = nx.Graph()
+    g.add_nodes_from([(0, {"weight": 2}), (1, {"weight": 3}), (2, {"weight": 4})])
+    g.add_edges_from([(0, 1), (1, 2), (2, 0)])
+    mwvc = MWVC(g)
+    assert (
+        mwvc.qp.Qdict[(0, 0)] == 2
+        and mwvc.qp.Qdict[(1, 1)] == 3
+        and mwvc.qp.Qdict[2, 2] == 4
+    )
+    penalty = mwvc.suggest_penalty(0.01)
+    qp = mwvc.penalty_method(penalty)
+    assert qp.Qdict[(0, 1)] != 0
 
 
 def test_maxcut_helper_functions():
