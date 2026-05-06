@@ -258,6 +258,90 @@ def test_qubo_to_qaoa_circuit_without_measurements():
     assert len(circuit.measurements) == 0
 
 
+def test_qubo_to_qaoa_circuit_defaults_to_state_vector():
+    qubo = QUBO(0, {0: 1, 1: -1}, {(0, 1): 0.5})
+    circuit = qubo.qubo_to_qaoa_circuit(
+        gammas=[0.1],
+        betas=[0.3],
+        include_measurements=False,
+    )
+    assert isinstance(circuit, Circuit)
+    assert circuit.density_matrix is False
+
+
+def test_qubo_to_qaoa_circuit_can_enable_density_matrix():
+    qubo = QUBO(0, {0: 1, 1: -1}, {(0, 1): 0.5})
+    circuit = qubo.qubo_to_qaoa_circuit(
+        gammas=[0.1],
+        betas=[0.3],
+        include_measurements=False,
+        density_matrix=True,
+    )
+    assert isinstance(circuit, Circuit)
+    assert circuit.density_matrix is True
+
+
+def test_qubo_to_qaoa_circuit_custom_mixer_promotes_density_matrix():
+    qubo = QUBO(0, {0: 1, 1: -1}, {(0, 1): 0.5})
+    mixer_calls = []
+
+    def mixer(beta_slice):
+        mixer_calls.append(beta_slice)
+        mixer_circuit = Circuit(2, density_matrix=True)
+        mixer_circuit.add(gates.RX(0, beta_slice[0]))
+        return mixer_circuit
+
+    circuit = qubo.qubo_to_qaoa_circuit(
+        gammas=[0.1, 0.2],
+        betas=[0.2, 0.4],
+        custom_mixer=[mixer],
+        include_measurements=False,
+    )
+    assert circuit.density_matrix is True
+    assert mixer_calls == [[0.2], [0.4]]
+
+
+def test_qubo_to_qaoa_circuit_explicit_density_matrix_uses_custom_mixer():
+    qubo = QUBO(0, {0: 1, 1: -1}, {(0, 1): 0.5})
+    mixer_calls = []
+
+    def mixer(beta_slice):
+        mixer_calls.append(beta_slice)
+        mixer_circuit = Circuit(2, density_matrix=True)
+        mixer_circuit.add(gates.RX(0, beta_slice[0]))
+        return mixer_circuit
+
+    circuit = qubo.qubo_to_qaoa_circuit(
+        gammas=[0.1, 0.2],
+        betas=[0.2, 0.4],
+        custom_mixer=[mixer],
+        include_measurements=False,
+        density_matrix=True,
+    )
+    assert circuit.density_matrix is True
+    assert mixer_calls == [[0.2], [0.4]]
+
+
+def test_qubo_to_qaoa_circuit_rejects_invalid_custom_mixer_length():
+    qubo = QUBO(0, {0: 1, 1: -1}, {(0, 1): 0.5})
+
+    def mixer(beta_slice):
+        mixer_circuit = Circuit(2)
+        mixer_circuit.add(gates.RX(0, beta_slice[0]))
+        return mixer_circuit
+
+    with pytest.raises(
+        ValueError,
+        match="custom_mixer must contain one callable or one callable per QAOA layer",
+    ):
+        qubo.qubo_to_qaoa_circuit(
+            gammas=[0.1, 0.2],
+            betas=[0.2, 0.4],
+            custom_mixer=[mixer, mixer, mixer],
+            include_measurements=False,
+        )
+
+
 @pytest.mark.parametrize(
     "gammas, betas",
     [
@@ -435,6 +519,48 @@ def test_train_qaoa_with_noise_model_returns_original_circuit():
     assert isinstance(stats, dict)
     assert isinstance(original_circuit, Circuit)
     assert circuit is not original_circuit
+    assert circuit.density_matrix is True
+    assert original_circuit.density_matrix is True
+
+
+def test_train_qaoa_defaults_to_state_vector_without_noise_model():
+    qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
+    best, params, extra, circuit, stats = qp.train_QAOA(
+        gammas=[0.1],
+        betas=[0.2],
+        nshots=20,
+        maxiter=5,
+        engine="legacy",
+    )
+    assert np.isfinite(best)
+    assert isinstance(params, np.ndarray)
+    assert isinstance(extra, dict)
+    assert isinstance(stats, dict)
+    assert circuit.density_matrix is False
+
+
+def test_train_qaoa_exact_noise_model_uses_density_matrix():
+    qp = QUBO(0, {(0, 0): 1.0, (1, 1): 1.0})
+    noise_model = NoiseModel()
+    noise_model.add(DepolarizingError(0.05))
+
+    result = qp.train_QAOA(
+        gammas=[0.1],
+        betas=[0.2],
+        nshots=None,
+        noise_model=noise_model,
+        maxiter=5,
+        engine="legacy",
+    )
+
+    best, params, extra, circuit, stats, original_circuit = result
+    assert np.isfinite(best)
+    assert isinstance(params, np.ndarray)
+    assert isinstance(extra, dict)
+    assert isinstance(stats, dict)
+    assert circuit.density_matrix is True
+    assert original_circuit.density_matrix is True
+    assert all(isinstance(value, float) for value in stats.values())
 
 
 @pytest.mark.parametrize("nshots", [None, 0])
