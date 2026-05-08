@@ -60,3 +60,25 @@ def test_dicke_circuit_qubit_count():
     w = optimal_weights(m, ell)
     circuit = dicke_circuit(m, ell, w)
     assert circuit.nqubits == m
+
+
+def test_weighted_dicke_rejects_wrong_weight_length():
+    with pytest.raises(ValueError):
+        weighted_dicke_amplitudes(4, 2, np.array([1.0, 0.0]))
+
+
+@pytest.mark.parametrize("ell", [0, 5])
+def test_weighted_dicke_rejects_invalid_cutoff(ell):
+    with pytest.raises(ValueError):
+        weighted_dicke_amplitudes(4, ell, np.ones(ell + 1))
+
+
+def test_weighted_dicke_rejects_above_dense_unitary_cap():
+    """The brute-force state preparation must fail loudly before huge unitaries."""
+    with pytest.raises(ValueError):
+        weighted_dicke_amplitudes(13, 1, np.ones(2))
+
+
+def test_weighted_dicke_rejects_zero_state():
+    with pytest.raises(ValueError):
+        weighted_dicke_amplitudes(4, 2, np.zeros(3))

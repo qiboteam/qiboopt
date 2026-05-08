@@ -53,6 +53,8 @@ def test_invalid_inputs():
     with pytest.raises(ValueError):
         MaxXORSAT(np.zeros((2,), dtype=np.uint8), np.zeros((2,), dtype=np.uint8))
     with pytest.raises(ValueError):
+        MaxXORSAT(np.zeros((2, 3), dtype=np.uint8), np.zeros((2, 1), dtype=np.uint8))
+    with pytest.raises(ValueError):
         MaxXORSAT(np.zeros((2, 3), dtype=np.uint8), np.zeros((3,), dtype=np.uint8))
     with pytest.raises(ValueError):
         MaxXORSAT(np.array([[2, 0], [0, 0]]), np.array([0, 0]))
@@ -81,6 +83,18 @@ def test_to_qubo_round_trip_row_weight_2():
         sat = problem.evaluate(x)
         cost = qubo.evaluate_f(list(bits))
         assert cost == problem.m - sat, (bits, sat, cost)
+
+
+def test_to_qubo_round_trip_row_weight_1_targets():
+    """Unit clauses become linear penalties for violating x_j = target."""
+    B = np.array([[1, 0], [0, 1]], dtype=np.uint8)
+    s = np.array([0, 1], dtype=np.uint8)
+    problem = MaxXORSAT(B, s)
+    qubo = problem.to_qubo(scale=2.0)
+
+    for bits in [(0, 0), (0, 1), (1, 0), (1, 1)]:
+        x = np.array(bits, dtype=np.uint8)
+        assert qubo.evaluate_f(list(bits)) == 2.0 * (problem.m - problem.evaluate(x))
 
 
 def test_to_qubo_unsupported_row_weight():
@@ -116,6 +130,12 @@ def test_evaluate_rejects_non_integer_floats():
         problem.evaluate(np.array([1.9, 0.0, 1.0]))
 
 
+def test_evaluate_rejects_wrong_shape():
+    problem = MaxXORSAT(np.array([[1, 1, 0]]), np.array([0]))
+    with pytest.raises(ValueError):
+        problem.evaluate(np.array([[1, 0, 1]], dtype=np.uint8))
+
+
 def test_evaluate_rejects_out_of_range_integers():
     """Values outside {0, 1} must be rejected after coercion."""
     problem = MaxXORSAT(np.array([[1, 1, 0]]), np.array([0]))
@@ -149,3 +169,16 @@ def test_evaluate_rejects_uint8_wraparound_values(bad_value):
     problem = MaxXORSAT(np.array([[1, 1, 0]]), np.array([0]))
     with pytest.raises(ValueError):
         problem.evaluate(np.array([bad_value, 0, 0]))
+
+
+def test_brute_force_rejects_large_variable_count():
+    """Exhaustive search is deliberately capped before 2**n becomes excessive."""
+    problem = MaxXORSAT(np.zeros((1, 21), dtype=np.uint8), np.array([0], dtype=np.uint8))
+    with pytest.raises(ValueError):
+        problem.brute_force()
+
+
+@pytest.mark.parametrize("row_weight", [0, 5])
+def test_random_sparse_rejects_impossible_row_weight(row_weight):
+    with pytest.raises(ValueError):
+        MaxXORSAT.random_sparse(n=4, m=3, row_weight=row_weight, seed=0)

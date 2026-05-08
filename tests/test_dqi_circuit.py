@@ -50,10 +50,18 @@ def test_circuit_measures_all_qubits_for_postselect():
 
 def test_invalid_ell():
     problem = MaxXORSAT.random_sparse(n=4, m=6, row_weight=2, seed=0)
+    with pytest.raises(TypeError):
+        dqi_circuit(problem, ell=1.0)
     with pytest.raises(ValueError):
         dqi_circuit(problem, ell=0)
     with pytest.raises(ValueError):
         dqi_circuit(problem, ell=problem.m + 1)
+
+
+def test_circuit_rejects_wrong_length_weights():
+    problem = MaxXORSAT.random_sparse(n=4, m=6, row_weight=2, seed=0)
+    with pytest.raises(ValueError):
+        dqi_circuit(problem, ell=2, weights=np.array([1.0, 0.0]))
 
 
 def test_circuit_rejects_decoder_for_different_problem():

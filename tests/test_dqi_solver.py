@@ -131,6 +131,29 @@ def test_sample_returns_expected_keys():
     assert out["raw_samples"].shape == (16, problem.m + problem.n)
 
 
+def test_sample_applies_noise_model_hook():
+    """A supplied noise model is applied to the constructed DQI circuit before execution."""
+
+    class IdentityNoiseModel:
+        def __init__(self):
+            self.applied_to = []
+
+        def apply(self, circuit):
+            self.applied_to.append(circuit.nqubits)
+            return circuit
+
+    B = np.array([[1, 0], [0, 1], [1, 1]], dtype=np.uint8)
+    s = np.array([1, 0, 1], dtype=np.uint8)
+    problem = MaxXORSAT(B, s)
+    noise_model = IdentityNoiseModel()
+    solver = DQISolver(problem, ell=1, noise_model=noise_model)
+
+    out = solver.sample(nshots=8)
+
+    assert noise_model.applied_to == [problem.m + problem.n]
+    assert out["raw_samples"].shape == (8, problem.m + problem.n)
+
+
 def test_unnormalized_weights_give_valid_probability():
     """Regression: passing weights = 2 * optimal_weights must NOT report
     decoder_success_probability above 1.

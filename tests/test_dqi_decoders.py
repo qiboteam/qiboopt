@@ -60,6 +60,13 @@ def test_lut_too_many_error_patterns():
         LUTDecoder(problem, ell=10)
 
 
+@pytest.mark.parametrize("ell", [-1, 4])
+def test_lut_rejects_cutoff_outside_problem_size(ell):
+    problem = MaxXORSAT.random_sparse(n=3, m=3, row_weight=2, seed=0)
+    with pytest.raises(ValueError):
+        LUTDecoder(problem, ell=ell)
+
+
 def test_decoder_registry():
     problem = MaxXORSAT.random_sparse(n=4, m=6, row_weight=2, seed=0)
     decoder = get_decoder("lut", problem, 2)
