@@ -173,7 +173,9 @@ def test_evaluate_rejects_uint8_wraparound_values(bad_value):
 
 def test_brute_force_rejects_large_variable_count():
     """Exhaustive search is deliberately capped before 2**n becomes excessive."""
-    problem = MaxXORSAT(np.zeros((1, 21), dtype=np.uint8), np.array([0], dtype=np.uint8))
+    problem = MaxXORSAT(
+        np.zeros((1, 21), dtype=np.uint8), np.array([0], dtype=np.uint8)
+    )
     with pytest.raises(ValueError):
         problem.brute_force()
 
