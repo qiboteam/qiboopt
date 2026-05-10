@@ -30,6 +30,9 @@ output = qp.train_QAOA(gammas=gammas, betas=betas)
 print(output)
 ```
 
+## Citation policy
+ [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.18603980.svg)](https://doi.org/10.5281/zenodo.18603980)
+
 ## Contact
 
 To get in touch with the community and the developers, consider joining the Qibo workspace on Matrix:

@@ -3,6 +3,7 @@ Various combinatorial optimisation applications that are commonly formulated as 
 """
 
 # pylint: disable=too-many-lines
+import copy
 
 import networkx as nx
 import numpy as np
@@ -138,10 +139,9 @@ class TSP:
             from qiboopt.combinatorial.combinatorial import TSP
             import numpy as np
             from collections import defaultdict
-            from qibo import gates
+            from qibo import Circuit, gates
             from qibo.models import QAOA
             from qibo.result import CircuitResult
-            from qibo.models.circuit import Circuit
 
 
             def convert_to_standard_Cauchy(config):
@@ -252,12 +252,40 @@ class TSP:
         """
         Constructs the TSP QUBO object using a penalty method for feasibility.
 
+        The TSP is formulated as:
+
+        .. math::
+
+            \\min \\sum_{u,v,j} d_{u,v} \\, x_{u,j} \\, x_{v,j+1}
+
+        Subject to constraints:
+
+        .. math::
+
+            \\sum_j x_{v,j} = 1 \\quad \\forall v \\
+            \\sum_v x_{v,j} = 1 \\quad \\forall j
+
+        The penalty method converts this to an unconstrained QUBO:
+
+        .. math::
+
+            f(x) = \\text{objective}(x) + \\lambda
+            \\left[
+                \\sum_v \\left(\\sum_j x_{v,j} - 1\\right)^2 +
+                \\sum_j \\left(\\sum_v x_{v,j} - 1\\right)^2
+            \\right]
+
         Args:
-            penalty (float): The penalty parameter for constraint violations.
+            penalty (float): The penalty parameter for constraint violations. It should be large enough to enforce
+                             constraints but not so large as to cause numerical issues.
 
         Returns:
             QUBO: A QUBO object for the TSP with penalties applied.
+        Raises:
+            ValueError: If penalty is negative.
         """
+        if penalty < 0:
+            raise ValueError(f"Penalty must be positive, got {penalty}")
         q_dict = {
             (
                 self.two_to_one[(u, j)],
@@ -342,6 +370,157 @@ class MIS:
 
     def __str__(self):
         return self.__class__.__name__
+
+
+class QAP:
+    """
+    Class for representing the Quadratic Assignment Problem (QAP).
+
+    The QAP assigns a set of facilities to a set of locations in a way that minimises the total assignment cost.
+
+    Args:
+        flow_matrix: An :math:`(n,n)` numpy array describing the flows between the facilities.
+        distance_matrix: A :math:`(n,n)` numpy array describing the distance between the locations
+        two_to_one (optional): Mapping from 2-index to a single index.
+
+    Example:
+        .. testcode::
+
+            from qiboopt.combinatorial.combinatorial import QAP
+
+            flow_matrix = np.array([[1, 2],[3, 4]])
+            distance_matrix = np.array([[4, 3],[2, 1]])
+            qap = QAP(flow_matrix, distance_matrix)
+            penalty = 10
+            qp = qap.penalty_method(penalty)
+    """
+
+    def __init__(self, flow_matrix, distance_matrix, two_to_one=None):
+        self.distance_matrix = distance_matrix
+        self.flow_matrix = flow_matrix
+        if distance_matrix.shape != flow_matrix.shape:
+            raise ValueError(
+                f"Input matrices must have the same shape. "
+                f"Got flow_matrix: {flow_matrix.shape}, distance_matrix: {distance_matrix.shape}"
+            )
+        if distance_matrix.shape[0] != distance_matrix.shape[1]:
+            raise ValueError(
+                f"Matrices must be square. Got shape: {distance_matrix.shape}"
+            )
+        self.num_cities = distance_matrix.shape[0]
+        self.two_to_one, _ = (
+            _calculate_two_to_one(self.num_cities) if two_to_one is None else two_to_one
+        )
+        q_dict = {
+            (
+                self.two_to_one[(i, k)],
+                self.two_to_one[(j, l)],
+            ): self.flow_matrix[i, j]
+            * self.distance_matrix[k, l]
+            for i in range(self.num_cities)
+            for j in range(self.num_cities)
+            for k in range(self.num_cities)
+            for l in range(self.num_cities)
+        }
+        self.qp = QUBO(0, q_dict)
+
+    def penalty_method(self, penalty):
+        """
+        construct the QUBO instance when the penalty method is being used.
+        """
+        qp = copy.copy(
+            self.qp
+        )  # copy the original copy so that we do not change the constructed QUBO again
+        # row constraints
+        for v in range(self.num_cities):
+            row_constraint = [0 for _ in range(self.num_cities**2)]
+            for j in range(self.num_cities):
+                row_constraint[self.two_to_one[(v, j)]] = 1
+            lp = LinearProblem(row_constraint, -1)
+            tmp_qp = lp.square()
+            tmp_qp = tmp_qp * penalty
+            qp = qp + tmp_qp
+
+        # column constraints
+        for j in range(self.num_cities):
+            col_constraint = [0 for _ in range(self.num_cities**2)]
+            for v in range(self.num_cities):
+                col_constraint[self.two_to_one[(v, j)]] = 1
+            lp = LinearProblem(col_constraint, -1)
+            tmp_qp = lp.square()
+            tmp_qp = tmp_qp * penalty
+            qp = qp + tmp_qp
+        return qp
+
+    def suggest_penalty(self):
+        """
+        This function suggest a penalty coefficient for a QAP instance. Currently, we use the dimension multiplied by
+        the maximum of flow and maximum of the distance matrix. This is a heuristic.
+        """
+        return (
+            self.flow_matrix.shape[0]
+            * np.max(np.abs(self.flow_matrix))
+            * np.max(np.abs(self.distance_matrix))
+        )
+
+
+class MWVC:
+    """
+    Class for representing the Minimum Weighted Vertex Cover (MWVC) problem.
+
+    The MWVC problem selects a subset of vertices in a graph such that every edge in the graph is incident to at
+    least one selected vertex.
+
+    Args:
+        graph: a networkx graph where the weight is encoded with keyword "weight".
+
+    Example:
+        .. testcode::
+
+            import networkx as nx
+            from qiboopt.combinatorial.combinatorial import MWVC
+
+            g = nx.Graph()
+            g.add_nodes_from([(0, {"weight":2}), (1, {"weight":3}), (2, {"weight":4})])
+            g.add_edges_from([(0,1), (1,2), (2,1)])
+            mwvc = MWVC(g)
+            penalty = 10
+            qp = mwvc.penalty_method(penalty)
+    """
+
+    def __init__(self, graph):
+        self.graph = graph
+        q_dict = {}
+        for v in self.graph.nodes:
+            q_dict[(v, v)] = self.graph.nodes[v]["weight"]
+        self.qp = QUBO(0, q_dict)
+
+    def penalty_method(self, penalty=2):
+        """
+        this function implement the penalty method for minimum vertex cover.
+        note that for unweighted version of minimum vertex cover, setting 2 as the penalty coefficient works.
+        Args:
+            penalty: the penalty is a real positive number.
+        """
+        constraint_dict = {}
+        constant = 0
+        for u, v in self.graph.edges:
+            constraint_dict[(u, u)] = constraint_dict.get((u, u), 0) - 1
+            constraint_dict[(v, v)] = constraint_dict.get((v, v), 0) - 1
+            constraint_dict[(u, v)] = constraint_dict.get((u, v), 0) + 1
+            constant += 1
+        constraint_qp = QUBO(constant, constraint_dict)
+        constraint_qp = penalty * constraint_qp
+        return constraint_qp + self.qp
+
+    def suggest_penalty(self, epsilon):
+        """
+        This function suggest a penalty coefficient fo the MWVC instance. We set it to be the largest weight plus a
+        small perturbation.
+        Args:
+            epsilon: a positive number that should be a small positive number, serving as a perturbation
+        """
+        return max([self.graph.nodes[v]["weight"] for v in self.graph.nodes]) + epsilon
 
 
 def _ensure_weight_matrix(g_or_w):
