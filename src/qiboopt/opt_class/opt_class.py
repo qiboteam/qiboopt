@@ -4,8 +4,10 @@ Optimisation classes
 
 import inspect
 import itertools
+import warnings
 from collections import defaultdict
 from enum import Enum
+
 import numpy as np
 from qibo import Circuit, gates, hamiltonians
 from qibo.backends import _check_backend
@@ -14,7 +16,6 @@ from qibo.hamiltonians import SymbolicHamiltonian
 from qibo.models import QAOA
 from qibo.optimizers import optimize
 from qibo.symbols import Z
-import warnings
 
 
 class QUBO:
@@ -623,25 +624,25 @@ class QUBO:
         return qaoa_circuit
 
     def train_QAOA(
-            self,
-            gammas=None,
-            betas=None,
-            alphas=None,
-            p=None,
-            nshots=int(1e3),
-            regular_loss=True,
-            maxiter=10,
-            method="cobyla",
-            cvar_delta=0.25,
-            custom_mixer=None,
-            density_matrix=False,
-            backend=None,
-            noise_model=None,
-            engine="legacy",
-            optimizer="adam",
-            lr=0.05,
-            epochs=100,
-            differentiation=None,
+        self,
+        gammas=None,
+        betas=None,
+        alphas=None,
+        p=None,
+        nshots=int(1e3),
+        regular_loss=True,
+        maxiter=10,
+        method="cobyla",
+        cvar_delta=0.25,
+        custom_mixer=None,
+        density_matrix=False,
+        backend=None,
+        noise_model=None,
+        engine="legacy",
+        optimizer="adam",
+        lr=0.05,
+        epochs=100,
+        differentiation=None,
     ):
         """Train QAOA.
 
@@ -814,24 +815,24 @@ class UnifiedQAOA:
     # ------------------------------------------------------------------ #
 
     def train(
-            self,
-            gammas=None,
-            betas=None,
-            alphas=None,
-            p=None,
-            nshots=int(1e3),
-            regular_loss=True,
-            maxiter=10,
-            method="cobyla",
-            cvar_delta=0.25,
-            density_matrix=False,
-            backend=None,
-            noise_model=None,
-            engine="legacy",
-            optimizer="adam",
-            lr=0.05,
-            epochs=100,
-            differentiation=None,
+        self,
+        gammas=None,
+        betas=None,
+        alphas=None,
+        p=None,
+        nshots=int(1e3),
+        regular_loss=True,
+        maxiter=10,
+        method="cobyla",
+        cvar_delta=0.25,
+        density_matrix=False,
+        backend=None,
+        noise_model=None,
+        engine="legacy",
+        optimizer="adam",
+        lr=0.05,
+        epochs=100,
+        differentiation=None,
     ):
         backend = _check_backend(backend)
         use_exact = (nshots is None) or (nshots == 0)
@@ -906,10 +907,14 @@ class UnifiedQAOA:
         if regular_loss:
 
             def myloss(parameters):
-                circuit = _circuit_from_flat(parameters, include_measurements=not use_exact)
+                circuit = _circuit_from_flat(
+                    parameters, include_measurements=not use_exact
+                )
                 if noise_model is not None:
                     if not density_matrix:
-                        raise_error(ValueError, "noise_model requires density_matrix=True.")
+                        raise_error(
+                            ValueError, "noise_model requires density_matrix=True."
+                        )
                     circuit = noise_model.apply(circuit)
 
                 if use_exact:
@@ -926,10 +931,14 @@ class UnifiedQAOA:
         else:
 
             def myloss(parameters, delta=cvar_delta):
-                circuit = _circuit_from_flat(parameters, include_measurements=not use_exact)
+                circuit = _circuit_from_flat(
+                    parameters, include_measurements=not use_exact
+                )
                 if noise_model is not None:
                     if not density_matrix:
-                        raise_error(ValueError, "noise_model requires density_matrix=True.")
+                        raise_error(
+                            ValueError, "noise_model requires density_matrix=True."
+                        )
                     circuit = noise_model.apply(circuit)
 
                 if use_exact:
@@ -1061,28 +1070,28 @@ class UnifiedQAOA:
 
         if self.variant == "standard":
             param_dict["gammas"] = flat_params[:depth]
-            param_dict["betas"] = flat_params[depth: 2 * depth]
+            param_dict["betas"] = flat_params[depth : 2 * depth]
 
         elif self.variant == "xqaoa":
             if self.mixer_type == MixerType.XY:
                 param_dict["gammas"] = flat_params[:depth]
-                param_dict["betas"] = flat_params[depth: 2 * depth]
-                param_dict["alphas"] = flat_params[2 * depth: 3 * depth]
+                param_dict["betas"] = flat_params[depth : 2 * depth]
+                param_dict["alphas"] = flat_params[2 * depth : 3 * depth]
 
             elif self.mixer_type == MixerType.X_EQUALS_Y:
                 param_dict["gammas"] = flat_params[:depth]
-                thetas = flat_params[depth: 2 * depth]
+                thetas = flat_params[depth : 2 * depth]
                 param_dict["betas"] = thetas
                 param_dict["alphas"] = thetas.copy()
 
             elif self.mixer_type == MixerType.Y:
                 param_dict["gammas"] = flat_params[:depth]
-                param_dict["alphas"] = flat_params[depth: 2 * depth]
+                param_dict["alphas"] = flat_params[depth : 2 * depth]
                 param_dict["betas"] = np.zeros(depth)
 
             elif self.mixer_type == MixerType.X:
                 param_dict["gammas"] = flat_params[:depth]
-                param_dict["betas"] = flat_params[depth: 2 * depth]
+                param_dict["betas"] = flat_params[depth : 2 * depth]
                 param_dict["alphas"] = np.zeros(depth)
 
         elif self.variant == "lr":
@@ -1105,7 +1114,7 @@ class UnifiedQAOA:
                 for layer in range(depth):
                     start = layer * params_per_layer
                     gammas.append(flat_params[start])
-                    betas.append(flat_params[start + 1: start + params_per_layer])
+                    betas.append(flat_params[start + 1 : start + params_per_layer])
                 param_dict["gammas"] = np.array(gammas)
                 param_dict["betas"] = np.array(betas)
 
@@ -1121,12 +1130,11 @@ class UnifiedQAOA:
                 for layer in range(depth):
                     start = layer * params_per_layer
                     gammas.append(flat_params[start])
-                    betas.append(flat_params[start + 1: start + params_per_layer])
+                    betas.append(flat_params[start + 1 : start + params_per_layer])
                 param_dict["gammas"] = np.array(gammas)
                 param_dict["betas"] = np.array(betas)
 
         return param_dict
-
 
     def _apply_initial_state(self, circuit):
         """Prepend the initial-state preparation to *circuit*."""
@@ -1140,8 +1148,7 @@ class UnifiedQAOA:
         self.qubo._phase_separation(circuit, gamma)
 
     def _apply_mixer(self, circuit, layer, param_dict, depth):
-        """Apply the mixer layer for the current layer.
-        """
+        """Apply the mixer layer for the current layer."""
         # --- custom mixer takes priority (except for MA-QAOA) ---
         if self.custom_mixer is not None and self.variant != "ma":
             betas = param_dict["betas"]
@@ -1150,11 +1157,11 @@ class UnifiedQAOA:
             elif len(self.custom_mixer) == depth:
                 mixer_fn = self.custom_mixer[layer]
             else:
-                raise_error(
-                    ValueError,
+                raise ValueError(
                     f"custom_mixer length must be 1 or {depth}, "
-                    f"got {len(self.custom_mixer)}.",
+                    f"got {len(self.custom_mixer)}."
                 )
+
             if callable(mixer_fn):
                 circuit += mixer_fn(betas[layer])
             else:
@@ -1225,7 +1232,6 @@ class UnifiedQAOA:
             circuit.add(gates.M(i) for i in range(self.n))
 
         return circuit
-
 
     def random_parameters(self, depth, seed=None):
         """Sample a random parameter vector uniformly in :math:`[0, 2\\pi)`.

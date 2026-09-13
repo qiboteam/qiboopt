@@ -11,8 +11,8 @@ from qibo.quantum_info import infidelity
 
 from qiboopt.opt_class.opt_class import (
     QUBO,
-    UnifiedQAOA,
     LinearProblem,
+    UnifiedQAOA,
     variable_dict_to_ind_dict,
     variable_to_ind,
 )
@@ -1024,7 +1024,9 @@ def test_unified_qaoa_custom_initial_state():
     init.add(gates.X(0))
     uqaoa = UnifiedQAOA(qubo, variant="standard", initial_state=init)
 
-    circuit = uqaoa.build_circuit([0.1, 0.2, 0.3, 0.4], depth=2, include_measurements=False)
+    circuit = uqaoa.build_circuit(
+        [0.1, 0.2, 0.3, 0.4], depth=2, include_measurements=False
+    )
     assert isinstance(circuit, Circuit)
     assert circuit.nqubits == 2
     assert len(circuit.queue) >= len(init.queue)
