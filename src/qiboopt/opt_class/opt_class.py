@@ -1140,32 +1140,27 @@ class UnifiedQAOA:
         self.qubo._phase_separation(circuit, gamma)
 
     def _apply_mixer(self, circuit, layer, param_dict, depth):
-        """Apply the mixer layer for the current *layer*.
-
-        Handles custom mixers, MA-QAOA per-qubit betas, and the standard /
-        XQAOA default mixer.
+        """Apply the mixer layer for the current layer.
         """
         # --- custom mixer takes priority (except for MA-QAOA) ---
         if self.custom_mixer is not None and self.variant != "ma":
             betas = param_dict["betas"]
             if len(self.custom_mixer) == 1:
-                mixer_circuit = self.custom_mixer[0]
+                mixer_fn = self.custom_mixer[0]
             elif len(self.custom_mixer) == depth:
-                mixer_circuit = self.custom_mixer[layer]
+                mixer_fn = self.custom_mixer[layer]
             else:
                 raise_error(
                     ValueError,
                     f"custom_mixer length must be 1 or {depth}, "
                     f"got {len(self.custom_mixer)}.",
                 )
-            # If the mixer is callable (takes betas), call it
-            if callable(mixer_circuit):
-                circuit += mixer_circuit(betas[layer : layer + 1])
+            if callable(mixer_fn):
+                circuit += mixer_fn(betas[layer])
             else:
-                circuit += mixer_circuit
+                circuit += mixer_fn
             return
 
-        # --- MA-QAOA: per-qubit (or per-edge) betas ---
         if self.variant == "ma":
             if self.ma_parameter_type == ParameterType.PER_QUBIT:
                 layer_betas = param_dict["betas"][layer]  # shape (n_qubits,)
