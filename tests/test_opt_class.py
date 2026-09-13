@@ -972,8 +972,8 @@ def test_unified_qaoa_unpack_parameters_standard():
     uqaoa = UnifiedQAOA(qubo, variant="standard")
     params = np.array([0.1, 0.2, 0.3, 0.4])
     unpacked = uqaoa.unpack_parameters(params, depth=2)
-    assert np.allclose(unpacked["gammas"], [0.1, 0.3])
-    assert np.allclose(unpacked["betas"], [0.2, 0.4])
+    assert np.allclose(unpacked["gammas"], [0.1, 0.2])
+    assert np.allclose(unpacked["betas"], [0.3, 0.4])
 
 
 def test_unified_qaoa_unpack_parameters_xqaoa_xy():
@@ -981,9 +981,9 @@ def test_unified_qaoa_unpack_parameters_xqaoa_xy():
     uqaoa = UnifiedQAOA(qubo, variant="xqaoa", mixer_type="xy")
     params = np.array([0.1, 0.2, 0.3, 0.4, 0.5, 0.6])
     unpacked = uqaoa.unpack_parameters(params, depth=2)
-    assert np.allclose(unpacked["gammas"], [0.1, 0.4])
-    assert np.allclose(unpacked["betas"], [0.2, 0.5])
-    assert np.allclose(unpacked["alphas"], [0.3, 0.6])
+    assert np.allclose(unpacked["gammas"], [0.1, 0.2])
+    assert np.allclose(unpacked["betas"], [0.3, 0.4])
+    assert np.allclose(unpacked["alphas"], [0.5, 0.6])
 
 
 def test_unified_qaoa_unpack_parameters_lr():
