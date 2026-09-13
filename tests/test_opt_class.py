@@ -1009,6 +1009,27 @@ def test_unified_qaoa_apply_mixer_custom_mixer_circuit_callable():
     assert isinstance(circuit, Circuit)
 
 
+def test_unified_qaoa_apply_mixer_custom_mixer_callable_branch():
+    qubo = _make_qubo()
+
+    def mixer(beta):
+        c = Circuit(qubo.n)
+        c.add(gates.RX(0, beta))
+        return c
+
+    uqaoa = UnifiedQAOA(
+        qubo,
+        variant="standard",
+        custom_mixer=[mixer],
+    )
+    circuit = uqaoa.build_circuit(
+        [0.1, 0.2, 0.3, 0.4],
+        depth=2,
+        include_measurements=False,
+    )
+    assert isinstance(circuit, Circuit)
+
+
 def test_unified_qaoa_apply_mixer_ma_per_qubit():
     qubo = _make_qubo()
     uqaoa = UnifiedQAOA(
