@@ -201,6 +201,7 @@ class QUBO:
         betas,
         alphas=None,
         custom_mixer=None,
+        initial_state=None,
         include_measurements=True,
         density_matrix=False,
     ):
@@ -210,12 +211,16 @@ class QUBO:
             If len(custom_mixer) == 1, then use this one circuit as mixer for all layers.
             If len(custom_mixer) == len(gammas), then use each circuit as mixer for each layer.
             If len(custom_mixer) != 1 and != len(gammas), raise an error.
+        Initial_state is meant for
         """
         p = len(gammas)
 
         # Apply initial Hadamard gates (uniform superposition)
         circuit = Circuit(self.n, density_matrix=density_matrix)
-        circuit.add(gates.H(i) for i in range(self.n))
+        if initial_state is not None:
+            circuit += initial_state
+        else:
+            circuit.add(gates.H(i) for i in range(self.n))
 
         for layer in range(p):
             self._phase_separation(
@@ -708,18 +713,57 @@ class QUBO:
             qaoa.set_parameters(np.array(params))
         return qaoa
 
-    def to_unified_qaoa(self, variant="standard", **kwargs):
+    def to_unified_qaoa(self, variant="standard", normalize=False, normalization="max", **kwargs):
         """Create a :class:`UnifiedQAOA` from this QUBO.
 
         Args:
             variant (str): QAOA variant (``"standard"``, ``"xqaoa"``,
                 ``"lr"``, ``"ma"``).
+            normalized (bool): determine whether to perform normalization for the Ising
+            normalization (str): either "h", "J", or "max" to determine the normalization scheme
             **kwargs: Forwarded to :class:`UnifiedQAOA`.
 
         Returns:
             :class:`UnifiedQAOA`
         """
-        return UnifiedQAOA(self, variant=variant, **kwargs)
+        qubo = self
+        if normalize:
+            qubo, scale = self.normalized(normalization)
+            kwargs["hamiltonian_scale"] = scale
+        return UnifiedQAOA(qubo, variant=variant, **kwargs)
+
+    def normalized(self, normalization="max"):
+        """
+        normalized the Ising coefficients via max of j, max of J, or max of both.
+        This is a common practice for LR-QAOA.
+        Args:
+            normalization (str): ("h", "J", "max").
+
+        Returns:
+            tuple{QUBO, float]: (normalized_QUBO, scale)
+
+        """
+        h, J, offset = self.to_ising()
+        max_h = max((abs(v) for v in h.values()), default=0.0)
+        max_J = max((abs(v) for v in J.values()), default=0.0)
+
+        if normalization == "J":
+            scale = max_J
+        elif normalization == "h":
+            scale = max_h
+        elif normalization == "max":
+            scale = max(max_h, max_J)
+        else:
+            raise ValueError(
+                "normalization must be one of 'J", 'h' or 'max'
+            )
+        if scale == 0:
+            scale = 1.0
+        normalized_qubo = self.copy()
+        normalized_qubo.h = {k: v / scale for k, v in h.items()}
+        normalized_qubo.J = {k: v / scale for k, v in J.items()}
+        normalized_qubo,offset - offset / scale
+        return normalized_qubo, scale
 
 
 class MixerType(Enum):
