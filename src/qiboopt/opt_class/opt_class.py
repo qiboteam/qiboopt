@@ -1038,7 +1038,7 @@ class UnifiedQAOA:
             return 3 * depth if self.mixer_type == MixerType.XY else 2 * depth
 
         if self.variant == "lr":
-            return 3 if self.lr_variant == "xqaoa" else 2
+            return 2
 
         if self.variant == "ma":
             if self.ma_parameter_type == ParameterType.PER_QUBIT:
@@ -1169,38 +1169,22 @@ class UnifiedQAOA:
                 raise_error(ValueError, "depth must be greater than zero.")
 
             if is_torch_parameters:
-                # Python scalar multiplication preserves the tensor autograd graph.
                 ramp = [layer / depth for layer in range(1, depth + 1)]
             else:
                 ramp = np.arange(1, depth + 1, dtype=float) / depth
 
-            if self.lr_variant == "xqaoa":
-                gamma_max, beta_max, alpha_max = flat_params
+            gamma_max, beta_max = flat_params
 
-                if is_torch_parameters:
-                    param_dict["gammas"] = [
-                        gamma_max * ramp_value for ramp_value in ramp
-                    ]
-                    param_dict["betas"] = [beta_max * ramp_value for ramp_value in ramp]
-                    param_dict["alphas"] = [
-                        alpha_max * ramp_value for ramp_value in ramp
-                    ]
-                else:
-                    param_dict["gammas"] = gamma_max * ramp
-                    param_dict["betas"] = beta_max * ramp
-                    param_dict["alphas"] = alpha_max * ramp
-
+            if is_torch_parameters:
+                param_dict["gammas"] = [
+                    gamma_max * ramp_value for ramp_value in ramp
+                ]
+                param_dict["betas"] = [
+                    beta_max * ramp_value for ramp_value in ramp
+                ]
             else:
-                gamma_max, beta_max = flat_params
-
-                if is_torch_parameters:
-                    param_dict["gammas"] = [
-                        gamma_max * ramp_value for ramp_value in ramp
-                    ]
-                    param_dict["betas"] = [beta_max * ramp_value for ramp_value in ramp]
-                else:
-                    param_dict["gammas"] = gamma_max * ramp
-                    param_dict["betas"] = beta_max * ramp
+                param_dict["gammas"] = gamma_max * ramp
+                param_dict["betas"] = beta_max * ramp
         elif self.variant == "ma":
             params_per_layer = None
 
