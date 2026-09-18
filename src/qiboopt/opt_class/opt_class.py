@@ -1201,8 +1201,9 @@ class UnifiedQAOA:
                 else:
                     param_dict["gammas"] = gamma_max * ramp
                     param_dict["betas"] = beta_max * ramp
-
         elif self.variant == "ma":
+            params_per_layer = None
+
             if self.ma_parameter_type == ParameterType.PER_QUBIT:
                 params_per_layer = 1 + self.n
 
@@ -1217,7 +1218,7 @@ class UnifiedQAOA:
                 )
                 params_per_layer = 1 + n_edges
 
-            else:
+            if params_per_layer is None:
                 raise_error(
                     ValueError,
                     f"Unknown MA parameter type: {self.ma_parameter_type}.",
@@ -1232,12 +1233,9 @@ class UnifiedQAOA:
                 betas.append(flat_params[start + 1 : start + params_per_layer])
 
             if is_torch_parameters:
-                # Keep tensor slices intact so gradients remain connected.
                 param_dict["gammas"] = gammas
                 param_dict["betas"] = betas
             else:
-                # Preserve the existing public behavior expected by tests,
-                # including the ``shape`` attribute.
                 param_dict["gammas"] = np.asarray(gammas, dtype=float)
                 param_dict["betas"] = np.asarray(betas, dtype=float)
 
