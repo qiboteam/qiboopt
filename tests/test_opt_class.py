@@ -1150,6 +1150,72 @@ def test_unified_qaoa_summary_ma_per_edge():
     assert "Number of edges   : 2" in summary
 
 
+def test_qubo_normalized_by_J():
+    qubo = _make_qubo()
+    normalized, scale = qubo.normalized(normalization="J")
+
+    assert scale == pytest.approx(0.125)
+    assert normalized.h[0] == pytest.approx(qubo.h[0] / scale)
+    assert normalized.h[1] == pytest.approx(qubo.h[1] / scale)
+    assert normalized.J[(0, 1)] == pytest.approx(qubo.J[(0, 1)] / scale)
+
+
+def test_qubo_normalized_by_h():
+    qubo = _make_qubo()
+    normalized, scale = qubo.normalized(normalization="h")
+
+    assert scale == pytest.approx(0.625)
+    assert normalized.h[0] == pytest.approx(qubo.h[0] / scale)
+    assert normalized.h[1] == pytest.approx(qubo.h[1] / scale)
+    assert normalized.J[(0, 1)] == pytest.approx(qubo.J[(0, 1)] / scale)
+
+
+def test_qubo_normalized_by_max():
+    qubo = _make_qubo()
+    normalized, scale = qubo.normalized(normalization="max")
+
+    assert scale == pytest.approx(0.625)
+    assert normalized.h[0] == pytest.approx(qubo.h[0] / scale)
+    assert normalized.h[1] == pytest.approx(qubo.h[1] / scale)
+    assert normalized.J[(0, 1)] == pytest.approx(qubo.J[(0, 1)] / scale)
+
+
+def test_qubo_normalized_zero_coefficients():
+    qubo = QUBO(0.0, {(0, 0): 0.0, (1, 1): 0.0, (0, 1): 0.0})
+    normalized, scale = qubo.normalized(normalization="max")
+
+    assert scale == pytest.approx(1.0)
+    assert all(value == pytest.approx(0.0) for value in normalized.h.values())
+    assert all(value == pytest.approx(0.0) for value in normalized.J.values())
+
+
+def test_qubo_normalized_invalid_mode():
+    qubo = _make_qubo()
+
+    with pytest.raises(ValueError, match="normalization"):
+        qubo.normalized(normalization="bad-mode")
+
+
+def test_to_unified_qaoa_normalize_false():
+    qubo = _make_qubo()
+    uqaoa = qubo.to_unified_qaoa(variant="standard", normalize=False)
+
+    assert isinstance(uqaoa, UnifiedQAOA)
+    assert uqaoa.qubo is qubo
+
+
+def test_to_unified_qaoa_normalize_true():
+    qubo = _make_qubo()
+    uqaoa = qubo.to_unified_qaoa(
+        variant="standard",
+        normalize=True,
+        normalization="J",
+    )
+
+    assert uqaoa.qubo is not qubo
+    assert uqaoa.hamiltonian_scale == pytest.approx(0.125)
+
+
 def test_linear_initialization():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
