@@ -211,63 +211,24 @@ class QUBO:
             If len(custom_mixer) == 1, then use this one circuit as mixer for all layers.
             If len(custom_mixer) == len(gammas), then use each circuit as mixer for each layer.
             If len(custom_mixer) != 1 and != len(gammas), raise an error.
-        Initial_state is meant for
+        This code is retain for backward compatibilty.
         """
-        p = len(gammas)
-
-        # Apply initial Hadamard gates (uniform superposition)
-        circuit = Circuit(self.n, density_matrix=density_matrix)
-        if initial_state is not None:
-            circuit += initial_state
-        else:
-            circuit.add(gates.H(i) for i in range(self.n))
-
-        for layer in range(p):
-            self._phase_separation(
-                circuit, gammas[layer]
-            )  # Phase separation (Ising model encoding)
-            if alphas is not None:
-                self._default_mixer(circuit, betas[layer], alphas[layer])
-            else:
-                if custom_mixer:
-                    if len(gammas) != len(betas):
-                        raise_error(
-                            ValueError, f"Input {len(gammas) = } != {len(betas) = }."
-                        )
-
-                    # Extract number of betas per layer
-                    betas_per_layer = len(betas) // p
-                    if (
-                        custom_mixer[0](
-                            betas[
-                                layer * betas_per_layer : (layer + 1) * betas_per_layer
-                            ]
-                        ).density_matrix
-                        != circuit.density_matrix
-                    ):
-                        raise_error(
-                            ValueError,
-                            f"Ensure density_matrix in custom_mixer is the same as density_matrix argument in QAOA circuit.",
-                        )
-                    if len(custom_mixer) == 1:
-                        circuit += custom_mixer[0](
-                            betas[
-                                layer * betas_per_layer : (layer + 1) * betas_per_layer
-                            ]
-                        )
-                    elif len(custom_mixer) == len(gammas):
-                        circuit += custom_mixer[layer](
-                            betas[
-                                layer * betas_per_layer : (layer + 1) * betas_per_layer
-                            ]
-                        )
-                else:
-                    self._default_mixer(circuit, betas[layer])
-
-        if include_measurements:
-            circuit.add(gates.M(i) for i in range(self.n))
-
-        return circuit
+        variant = "xqaoa" if alphas is not None else "standard"
+        uqaoa = UnifiedQAOA(
+            self,
+            variant=variant,
+            custom_mixer=custom_mixer,
+            initial_state=initial_state,
+        )
+        params = list(gammas) + list(betas)
+        if alphas is not None:
+            params += list(alphas)
+        return uqaoa.build_circuit(
+            params,
+            depth=len(gammas),
+            include_measurements=include_measurements,
+            density_matrix=density_matrix,
+        )
 
     def qubo_to_ising(self):
         """Convert a QUBO problem to an Ising problem.
@@ -713,7 +674,9 @@ class QUBO:
             qaoa.set_parameters(np.array(params))
         return qaoa
 
-    def to_unified_qaoa(self, variant="standard", normalize=False, normalization="max", **kwargs):
+    def to_unified_qaoa(
+        self, variant="standard", normalize=False, normalization="max", **kwargs
+    ):
         """Create a :class:`UnifiedQAOA` from this QUBO.
 
         Args:
@@ -743,9 +706,8 @@ class QUBO:
             tuple{QUBO, float]: (normalized_QUBO, scale)
 
         """
-        h, J, offset = self.to_ising()
-        max_h = max((abs(v) for v in h.values()), default=0.0)
-        max_J = max((abs(v) for v in J.values()), default=0.0)
+        max_h = max((abs(v) for v in self.h.values()), default=0.0)
+        max_J = max((abs(v) for v in self.J.values()), default=0.0)
 
         if normalization == "J":
             scale = max_J
@@ -754,15 +716,12 @@ class QUBO:
         elif normalization == "max":
             scale = max(max_h, max_J)
         else:
-            raise ValueError(
-                "normalization must be one of 'J", 'h' or 'max'
-            )
+            raise ValueError("normalization must be one of 'J", "h" or "max")
         if scale == 0:
             scale = 1.0
-        normalized_qubo = self.copy()
-        normalized_qubo.h = {k: v / scale for k, v in h.items()}
-        normalized_qubo.J = {k: v / scale for k, v in J.items()}
-        normalized_qubo,offset - offset / scale
+        h_norm = {k: v / scale for k, v in self.h.items()}
+        J_norm = {k: v / scale for k, v in self.J.items()}
+        normalized_qubo = QUBO(self.offset / scale, h_norm, J_norm)
         return normalized_qubo, scale
 
 
@@ -801,6 +760,8 @@ class UnifiedQAOA:
         initial_state (:class:`qibo.models.Circuit`, optional): Circuit that prepares
             the initial state.  When ``None`` (default), Hadamard gates on every qubit
             are used.
+        hamiltonian_scale (float, optional): Scale factor used to normalize the Ising Hamiltonian,
+            especially for LR-QAOA
         custom_mixer: An optional callable or list of :class:`qibo.models.Circuit`.
             If a single-element list, the same mixer is reused for every layer.
             If its length equals the depth, each element is used for the corresponding
@@ -829,6 +790,7 @@ class UnifiedQAOA:
         ma_parameter_type=None,
         graph=None,
         initial_state=None,
+        hamiltonian_scale=1.0,
         custom_mixer=None,
     ):
         if not isinstance(qubo, QUBO):
@@ -839,6 +801,7 @@ class UnifiedQAOA:
         self.variant = variant.lower()
         self.graph = graph
         self.initial_state = initial_state
+        self.hamiltonian_scale = hamiltonian_scale
         self.custom_mixer = custom_mixer
 
         if self.variant == "xqaoa":
@@ -1093,16 +1056,60 @@ class UnifiedQAOA:
     def unpack_parameters(self, flat_params, depth):
         """Convert a flat parameter vector to a variant-specific structure.
 
-        Uses block ordering to stay consistent with the existing QUBO API:
-        - standard: [gammas..., betas...]
-        - xqaoa XY: [gammas..., betas..., alphas...]
-        - xqaoa X=Y: [gammas..., thetas...]
-        - xqaoa Y: [gammas..., alphas...]
-        - xqaoa X: [gammas..., betas...]
-        - lr: compact max-parameter form, then linearly ramped
+        Uses block ordering consistent with the existing QUBO API:
+
+        - standard: ``[gammas..., betas...]``
+        - xqaoa XY: ``[gammas..., betas..., alphas...]``
+        - xqaoa X=Y: ``[gammas..., thetas...]``
+        - xqaoa Y: ``[gammas..., alphas...]``
+        - xqaoa X: ``[gammas..., betas...]``
+        - lr: compact maximum-parameter form, then linearly ramped
         - ma: per-layer blocks
+
+        Differentiable PyTorch parameters are not converted to NumPy, because
+        converting a tensor with ``requires_grad=True`` to NumPy would break
+        autograd and raise a runtime error.
+
+        Args:
+            flat_params (array-like): Flat parameter vector.
+            depth (int): Number of QAOA layers.
+
+        Returns:
+            dict: Variant-specific parameter arrays or tensor-preserving
+            containers.
         """
-        flat_params = np.asarray(flat_params, dtype=float)
+
+        def _is_torch_value(value):
+            """Check for a PyTorch tensor without importing torch."""
+            value_type = type(value)
+            module = getattr(value_type, "__module__", "")
+            return (
+                module == "torch"
+                or module.startswith("torch.")
+                or (
+                    hasattr(value, "requires_grad")
+                    and hasattr(value, "detach")
+                    and hasattr(value, "grad_fn")
+                )
+            )
+
+        def _contains_torch_values(values):
+            """Detect a tensor or a flat container containing tensors."""
+            if _is_torch_value(values):
+                return True
+
+            try:
+                return any(_is_torch_value(value) for value in values)
+            except TypeError:
+                return False
+
+        is_torch_parameters = _contains_torch_values(flat_params)
+
+        # Preserve differentiable tensors. Keep the original NumPy behavior for
+        # ordinary lists, tuples, and NumPy arrays.
+        if not is_torch_parameters:
+            flat_params = np.asarray(flat_params, dtype=float)
+
         expected = self.get_param_count(depth)
         if len(flat_params) != expected:
             raise_error(
@@ -1124,59 +1131,115 @@ class UnifiedQAOA:
 
             elif self.mixer_type == MixerType.X_EQUALS_Y:
                 param_dict["gammas"] = flat_params[:depth]
+
                 thetas = flat_params[depth : 2 * depth]
                 param_dict["betas"] = thetas
-                param_dict["alphas"] = thetas.copy()
+
+                # Preserve the existing contract that betas and alphas are
+                # distinct containers, while retaining the autograd graph.
+                if is_torch_parameters:
+                    if hasattr(thetas, "clone"):
+                        param_dict["alphas"] = thetas.clone()
+                    else:
+                        # This handles a Python list containing scalar tensors.
+                        param_dict["alphas"] = list(thetas)
+                else:
+                    param_dict["alphas"] = thetas.copy()
 
             elif self.mixer_type == MixerType.Y:
                 param_dict["gammas"] = flat_params[:depth]
                 param_dict["alphas"] = flat_params[depth : 2 * depth]
-                param_dict["betas"] = np.zeros(depth)
+
+                if is_torch_parameters:
+                    param_dict["betas"] = [0.0] * depth
+                else:
+                    param_dict["betas"] = np.zeros(depth, dtype=float)
 
             elif self.mixer_type == MixerType.X:
                 param_dict["gammas"] = flat_params[:depth]
                 param_dict["betas"] = flat_params[depth : 2 * depth]
-                param_dict["alphas"] = np.zeros(depth)
+
+                if is_torch_parameters:
+                    param_dict["alphas"] = [0.0] * depth
+                else:
+                    param_dict["alphas"] = np.zeros(depth, dtype=float)
 
         elif self.variant == "lr":
-            ramp = np.arange(1, depth + 1, dtype=float) / depth
+            if depth <= 0:
+                raise_error(ValueError, "depth must be greater than zero.")
+
+            if is_torch_parameters:
+                # Python scalar multiplication preserves the tensor autograd graph.
+                ramp = [layer / depth for layer in range(1, depth + 1)]
+            else:
+                ramp = np.arange(1, depth + 1, dtype=float) / depth
+
             if self.lr_variant == "xqaoa":
                 gamma_max, beta_max, alpha_max = flat_params
-                param_dict["gammas"] = gamma_max * ramp
-                param_dict["betas"] = beta_max * ramp
-                param_dict["alphas"] = alpha_max * ramp
+
+                if is_torch_parameters:
+                    param_dict["gammas"] = [
+                        gamma_max * ramp_value for ramp_value in ramp
+                    ]
+                    param_dict["betas"] = [beta_max * ramp_value for ramp_value in ramp]
+                    param_dict["alphas"] = [
+                        alpha_max * ramp_value for ramp_value in ramp
+                    ]
+                else:
+                    param_dict["gammas"] = gamma_max * ramp
+                    param_dict["betas"] = beta_max * ramp
+                    param_dict["alphas"] = alpha_max * ramp
+
             else:
                 gamma_max, beta_max = flat_params
-                param_dict["gammas"] = gamma_max * ramp
-                param_dict["betas"] = beta_max * ramp
+
+                if is_torch_parameters:
+                    param_dict["gammas"] = [
+                        gamma_max * ramp_value for ramp_value in ramp
+                    ]
+                    param_dict["betas"] = [beta_max * ramp_value for ramp_value in ramp]
+                else:
+                    param_dict["gammas"] = gamma_max * ramp
+                    param_dict["betas"] = beta_max * ramp
 
         elif self.variant == "ma":
             if self.ma_parameter_type == ParameterType.PER_QUBIT:
                 params_per_layer = 1 + self.n
-                gammas = []
-                betas = []
-                for layer in range(depth):
-                    start = layer * params_per_layer
-                    gammas.append(flat_params[start])
-                    betas.append(flat_params[start + 1 : start + params_per_layer])
-                param_dict["gammas"] = np.array(gammas)
-                param_dict["betas"] = np.array(betas)
 
             elif self.ma_parameter_type == ParameterType.PER_EDGE:
+                if self.graph is None:
+                    raise_error(ValueError, "Graph required for per-edge MA-QAOA.")
+
                 n_edges = (
                     len(self.graph.edges)
                     if hasattr(self.graph, "edges")
                     else len(self.graph)
                 )
                 params_per_layer = 1 + n_edges
-                gammas = []
-                betas = []
-                for layer in range(depth):
-                    start = layer * params_per_layer
-                    gammas.append(flat_params[start])
-                    betas.append(flat_params[start + 1 : start + params_per_layer])
-                param_dict["gammas"] = np.array(gammas)
-                param_dict["betas"] = np.array(betas)
+
+            else:
+                raise_error(
+                    ValueError,
+                    f"Unknown MA parameter type: {self.ma_parameter_type}.",
+                )
+
+            gammas = []
+            betas = []
+
+            for layer in range(depth):
+                start = layer * params_per_layer
+                gammas.append(flat_params[start])
+                betas.append(flat_params[start + 1 : start + params_per_layer])
+
+            if is_torch_parameters:
+                # Keep tensor slices intact so gradients remain connected.
+                param_dict["gammas"] = gammas
+                param_dict["betas"] = betas
+            else:
+                # Preserve the existing public behavior expected by tests,
+                # including the ``shape`` attribute.
+                param_dict["gammas"] = np.asarray(gammas, dtype=float)
+                param_dict["betas"] = np.asarray(betas, dtype=float)
 
         return param_dict
 
