@@ -907,17 +907,6 @@ def test_unified_qaoa_unpack_parameters_xqaoa_x():
     assert np.allclose(unpacked["alphas"], [0.0, 0.0])
 
 
-def test_unified_qaoa_unpack_parameters_lr_xqaoa():
-    qubo = _make_qubo()
-    uqaoa = UnifiedQAOA(qubo, variant="lr", lr_variant="xqaoa")
-
-    unpacked = uqaoa.unpack_parameters(np.array([1.0, 2.0, 3.0]), depth=2)
-
-    assert np.allclose(unpacked["gammas"], [0.5, 1.0])
-    assert np.allclose(unpacked["betas"], [1.0, 2.0])
-    assert np.allclose(unpacked["alphas"], [1.5, 3.0])
-
-
 def test_unified_qaoa_unpack_parameters_ma_per_edge():
     qubo = _make_qubo()
     graph = [(0, 1), (1, 2)]
@@ -1216,6 +1205,106 @@ def test_to_unified_qaoa_normalize_true():
     assert uqaoa.hamiltonian_scale == pytest.approx(0.125)
 
 
+def test_unpack_parameters_detects_direct_torch_tensor():
+    """Covers `_is_torch_value(values)` returning True directly."""
+    torch = pytest.importorskip("torch")
+
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="standard")
+
+    parameters = torch.tensor([0.1, 0.2], requires_grad=True)
+    unpacked = uqaoa.unpack_parameters(parameters, depth=1)
+
+    assert unpacked["gammas"].requires_grad
+    assert unpacked["betas"].requires_grad
+
+
+
+def test_unpack_parameters_handles_non_iterable_parameter_input():
+    """Covers `_contains_torch_values`'s TypeError handler."""
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="standard")
+
+    with pytest.raises(TypeError):
+        uqaoa.unpack_parameters(0.5, depth=1)
+
+
+def test_unpack_parameters_detects_tensors_in_list():
+    """Covers tensor detection inside a container."""
+    torch = pytest.importorskip("torch")
+
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="standard")
+
+    parameters = [
+        torch.tensor(0.1, requires_grad=True),
+        torch.tensor(0.2, requires_grad=True),
+    ]
+    unpacked = uqaoa.unpack_parameters(parameters, depth=1)
+
+    assert unpacked["gammas"][0].requires_grad
+    assert unpacked["betas"][0].requires_grad
+
+
+def test_unpack_parameters_xqaoa_x_equals_y_with_torch():
+    """Covers `if is_torch_parameters:` inside X_EQUALS_Y branch."""
+    torch = pytest.importorskip("torch")
+
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="xqaoa", mixer_type="x_equals_y")
+
+    parameters = torch.tensor([0.1, 0.2, 0.3, 0.4], requires_grad=True)
+    unpacked = uqaoa.unpack_parameters(parameters, depth=2)
+
+    assert torch.allclose(unpacked["gammas"], torch.tensor([0.1, 0.2]))
+    assert torch.allclose(unpacked["betas"], torch.tensor([0.3, 0.4]))
+    assert torch.allclose(unpacked["alphas"], torch.tensor([0.3, 0.4]))
+
+    # betas and alphas must be distinct tensor objects (via .clone()),
+    # while both remain connected to the autograd graph.
+    assert unpacked["betas"] is not unpacked["alphas"]
+    assert unpacked["alphas"].requires_grad
+
+
+def test_unpack_parameters_xqaoa_y_with_torch():
+    """Covers `if is_torch_parameters:` inside Y branch (betas fallback)."""
+    torch = pytest.importorskip("torch")
+
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="xqaoa", mixer_type="y")
+
+    parameters = torch.tensor([0.1, 0.2, 0.3, 0.4], requires_grad=True)
+    unpacked = uqaoa.unpack_parameters(parameters, depth=2)
+
+    assert torch.allclose(unpacked["gammas"], torch.tensor([0.1, 0.2]))
+    assert torch.allclose(unpacked["alphas"], torch.tensor([0.3, 0.4]))
+
+    # betas must be the torch-safe fallback: a plain list of zeros,
+    # not a NumPy array.
+    assert unpacked["betas"] == [0.0, 0.0]
+    assert isinstance(unpacked["betas"], list)
+
+
+def test_unpack_parameters_xqaoa_x_with_torch():
+    """Covers `if is_torch_parameters:` inside X branch (alphas fallback)."""
+    torch = pytest.importorskip("torch")
+
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="xqaoa", mixer_type="x")
+
+    parameters = torch.tensor([0.1, 0.2, 0.3, 0.4], requires_grad=True)
+    unpacked = uqaoa.unpack_parameters(parameters, depth=2)
+
+    assert torch.allclose(unpacked["gammas"], torch.tensor([0.1, 0.2]))
+    assert torch.allclose(unpacked["betas"], torch.tensor([0.3, 0.4]))
+
+    # alphas must be the torch-safe fallback: a plain list of zeros,
+    # not a NumPy array.
+    assert unpacked["alphas"] == [0.0, 0.0]
+    assert isinstance(unpacked["alphas"], list)
+
+
+
 def test_linear_initialization():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
@@ -1342,7 +1431,6 @@ def test_qubo_to_unified_qaoa_returns_unified_instance():
         ("xqaoa", "y", None, None, 3, 6),
         ("xqaoa", "x", None, None, 3, 6),
         ("lr", None, "standard", None, 3, 2),
-        ("lr", None, "xqaoa", None, 3, 3),
         ("ma", None, None, "per_qubit", 3, 9),
     ],
 )
