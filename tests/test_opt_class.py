@@ -1105,11 +1105,11 @@ def test_unified_qaoa_summary_xqaoa():
 
 def test_unified_qaoa_summary_lr():
     qubo = _make_qubo()
-    uqaoa = UnifiedQAOA(qubo, variant="lr", lr_variant="standard")
+    uqaoa = UnifiedQAOA(qubo, variant="lr")
 
     summary = uqaoa.summary(depth=2)
 
-    assert "LR base variant   : standard" in summary
+    assert "LR base variant   : lr" in summary
     assert "Note: parameter count is independent of depth!" in summary
 
 
@@ -1219,7 +1219,6 @@ def test_unpack_parameters_detects_direct_torch_tensor():
     assert unpacked["betas"].requires_grad
 
 
-
 def test_unpack_parameters_handles_non_iterable_parameter_input():
     """Covers `_contains_torch_values`'s TypeError handler."""
     qubo = _make_qubo()
@@ -1303,6 +1302,35 @@ def test_unpack_parameters_xqaoa_x_with_torch():
     assert unpacked["alphas"] == [0.0, 0.0]
     assert isinstance(unpacked["alphas"], list)
 
+
+def test_unpack_parameters_lr_with_torch():
+    torch = pytest.importorskip("torch")
+
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="lr")
+
+    parameters = torch.tensor([0.6, 0.9], requires_grad=True)
+    unpacked = uqaoa.unpack_parameters(parameters, depth=3)
+
+    gammas = torch.stack(unpacked["gammas"])
+    betas = torch.stack(unpacked["betas"])
+
+    assert torch.allclose(gammas, torch.tensor([0.2, 0.4, 0.6]))
+    assert torch.allclose(betas, torch.tensor([0.3, 0.6, 0.9]))
+
+    loss = gammas.sum() + betas.sum()
+    loss.backward()
+
+    assert parameters.grad is not None
+    assert torch.all(parameters.grad != 0)
+
+
+def test_unpack_parameters_lr_rejects_zero_depth():
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="lr")
+
+    with pytest.raises(ValueError, match="depth must be greater than zero"):
+        uqaoa.unpack_parameters(np.array([0.6, 0.9]), depth=0)
 
 
 def test_linear_initialization():
@@ -1423,26 +1451,25 @@ def test_qubo_to_unified_qaoa_returns_unified_instance():
 
 
 @pytest.mark.parametrize(
-    "variant,mixer_type,lr_variant,ma_parameter_type,depth,expected",
+    "variant,mixer_type,ma_parameter_type,depth,expected",
     [
-        ("standard", None, None, None, 3, 6),
-        ("xqaoa", "xy", None, None, 3, 9),
-        ("xqaoa", "x_equals_y", None, None, 3, 6),
-        ("xqaoa", "y", None, None, 3, 6),
-        ("xqaoa", "x", None, None, 3, 6),
-        ("lr", None, "standard", None, 3, 2),
-        ("ma", None, None, "per_qubit", 3, 9),
+        ("standard", None, None, 3, 6),
+        ("xqaoa", "xy", None, 3, 9),
+        ("xqaoa", "x_equals_y", None, 3, 6),
+        ("xqaoa", "y", None, 3, 6),
+        ("xqaoa", "x", None, 3, 6),
+        ("lr", None, None, 3, 2),
+        ("ma", None, "per_qubit", 3, 9),
     ],
 )
 def test_unified_qaoa_get_param_count(
-    variant, mixer_type, lr_variant, ma_parameter_type, depth, expected
+    variant, mixer_type, ma_parameter_type, depth, expected
 ):
     qubo = QUBO(0, {(0, 0): 1.0, (1, 1): -1.0})
     uqaoa = UnifiedQAOA(
         qubo,
         variant=variant,
         mixer_type=mixer_type,
-        lr_variant=lr_variant,
         ma_parameter_type=ma_parameter_type,
     )
     assert uqaoa.get_param_count(depth) == expected
@@ -1469,7 +1496,7 @@ def test_unified_qaoa_unpack_parameters_xqaoa_xy():
 
 def test_unified_qaoa_unpack_parameters_lr():
     qubo = QUBO(0, {(0, 0): 1.0, (1, 1): -1.0})
-    uqaoa = UnifiedQAOA(qubo, variant="lr", lr_variant="standard")
+    uqaoa = UnifiedQAOA(qubo, variant="lr")
     unpacked = uqaoa.unpack_parameters(np.array([1.0, 2.0]), depth=4)
     assert np.allclose(unpacked["gammas"], [0.25, 0.5, 0.75, 1.0])
     assert np.allclose(unpacked["betas"], [0.5, 1.0, 1.5, 2.0])

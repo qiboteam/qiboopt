@@ -358,36 +358,36 @@ class QUBO:
     def tabu_search(self, max_iterations=100, tabu_size=10):
         """Solves the QUBO problem using the Tabu search algorithm.
 
-        Args:
-            max_iterations (int): Maximum number of iterations to run the Tabu search.
-                Defaults to 100.
-            tabu_size (int): Size of the Tabu list.
+                Args:
+                    max_iterations (int): Maximum number of iterations to run the Tabu search.
+                        Defaults to 100.
+                    tabu_size (int): Size of the Tabu list.
 
-        Returns:
-            (list, float): A list of integers representing the best binary vector found and its corresponding value
+                Returns:
+                    (list, float): A list of integers representing the best binary vector found and its corresponding value
 
-        Example:
-            .. testcode::
+                Example:
+                    .. testcode::
 
-                from qiboopt.opt_class.opt_class import QUBO
+                        from qiboopt.opt_class.opt_class import QUBO
 
 
-                Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp = QUBO(0, Qdict)
-                best_solution, best_obj_value = qp.tabu_search(50, 5)
-                print(best_solution)
+                        Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+                        qp = QUBO(0, Qdict)
+                        best_solution, best_obj_value = qp.tabu_search(50, 5)
+                        print(best_solution)
 
-            .. testoutput::
+                    .. testoutput::
 
-                [0 1]
+                        [0 1]
 
-            .. testcode::
+                    .. testcode::
 
-                print(best_obj_value)
+                        print(best_obj_value)
+        f
+                    .. testoutput::
 
-            .. testoutput::
-
-                -1.0
+                        -1.0
         """
         x = np.random.randint(2, size=self.n)  # Initial solution
         best_solution = x.copy()
@@ -752,7 +752,6 @@ class UnifiedQAOA:
         variant (str): One of ``"standard"``, ``"xqaoa"``, ``"lr"``, ``"ma"``.
         mixer_type (str, optional): For ``variant="xqaoa"``: ``"xy"``, ``"x_equals_y"``,
             ``"y"``, or ``"x"``.
-        lr_variant (str, optional): For ``variant="lr"``: ``"standard"`` or ``"xqaoa"``.
         ma_parameter_type (str, optional): For ``variant="ma"``: ``"per_qubit"`` or
             ``"per_edge"``.
         graph (optional): Graph with an ``edges`` attribute. Required for
@@ -786,7 +785,6 @@ class UnifiedQAOA:
         qubo,
         variant="standard",
         mixer_type=None,
-        lr_variant=None,
         ma_parameter_type=None,
         graph=None,
         initial_state=None,
@@ -806,11 +804,9 @@ class UnifiedQAOA:
 
         if self.variant == "xqaoa":
             self.mixer_type = MixerType(mixer_type or "xy")
-        elif self.variant == "lr":
-            self.lr_variant = lr_variant or "standard"
         elif self.variant == "ma":
             self.ma_parameter_type = ParameterType(ma_parameter_type or "per_qubit")
-        elif self.variant != "standard":
+        elif self.variant != "standard" and self.variant != "lr":
             raise_error(
                 ValueError,
                 f"Unknown variant '{self.variant}'. "
@@ -1176,12 +1172,8 @@ class UnifiedQAOA:
             gamma_max, beta_max = flat_params
 
             if is_torch_parameters:
-                param_dict["gammas"] = [
-                    gamma_max * ramp_value for ramp_value in ramp
-                ]
-                param_dict["betas"] = [
-                    beta_max * ramp_value for ramp_value in ramp
-                ]
+                param_dict["gammas"] = [gamma_max * ramp_value for ramp_value in ramp]
+                param_dict["betas"] = [beta_max * ramp_value for ramp_value in ramp]
             else:
                 param_dict["gammas"] = gamma_max * ramp
                 param_dict["betas"] = beta_max * ramp
@@ -1355,7 +1347,7 @@ class UnifiedQAOA:
         if self.variant == "xqaoa":
             lines.append(f"Mixer type        : {self.mixer_type.value}")
         elif self.variant == "lr":
-            lines.append(f"LR base variant   : {self.lr_variant}")
+            lines.append(f"LR base variant   : lr")
             lines.append("Note: parameter count is independent of depth!")
         elif self.variant == "ma":
             lines.append(f"MA parameter type : {self.ma_parameter_type.value}")
