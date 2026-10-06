@@ -29,3 +29,14 @@ Linear problem write up goes here.
 .. autoclass:: qiboopt.opt_class.opt_class.LinearProblem
     :members:
     :member-order: bysource
+
+.. _unified-qaoa:
+
+Unified QAOA
+^^^^^^^^^^^^^^
+
+The unified QAOA interface supports standard QAOA, XQAOA, LR-QAOA, and MA-QAOA circuit construction.
+
+.. autoclass:: qiboopt.opt_class.opt_class.UnifiedQAOA
+    :members:
+    :member-order: bysource
