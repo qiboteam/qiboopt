@@ -359,36 +359,36 @@ class QUBO:
     def tabu_search(self, max_iterations=100, tabu_size=10):
         """Solves the QUBO problem using the Tabu search algorithm.
 
-        Args:
-            max_iterations (int): Maximum number of iterations to run the Tabu search.
-                Defaults to 100.
-            tabu_size (int): Size of the Tabu list.
+                Args:
+                    max_iterations (int): Maximum number of iterations to run the Tabu search.
+                        Defaults to 100.
+                    tabu_size (int): Size of the Tabu list.
 
-        Returns:
-            (list, float): A list of integers representing the best binary vector found and its corresponding value
+                Returns:
+                    (list, float): A list of integers representing the best binary vector found and its corresponding value
 
-        Example:
-            .. testcode::
+                Example:
+                    .. testcode::
 
-                from qiboopt.opt_class.opt_class import QUBO
+                        from qiboopt.opt_class.opt_class import QUBO
 
 
-                Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp = QUBO(0, Qdict)
-                best_solution, best_obj_value = qp.tabu_search(50, 5)
-                print(best_solution)
+                        Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+                        qp = QUBO(0, Qdict)
+                        best_solution, best_obj_value = qp.tabu_search(50, 5)
+                        print(best_solution)
 
-            .. testoutput::
+                    .. testoutput::
 
-                [0 1]
+                        [0 1]
 
-            .. testcode::
+                    .. testcode::
 
-                print(best_obj_value)
+                        print(best_obj_value)
+        f
+                    .. testoutput::
 
-            .. testoutput::
-
-                -1.0
+                        -1.0
         """
         x = np.random.randint(2, size=self.n)  # Initial solution
         best_solution = x.copy()
