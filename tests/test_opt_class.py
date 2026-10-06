@@ -1333,6 +1333,165 @@ def test_unpack_parameters_lr_rejects_zero_depth():
         uqaoa.unpack_parameters(np.array([0.6, 0.9]), depth=0)
 
 
+def test_unpack_parameters_x_equals_y_with_list_of_torch_tensors():
+    """Copy the list container without disconnecting its tensor gradients."""
+    torch = pytest.importorskip("torch")
+
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(
+        qubo,
+        variant="xqaoa",
+        mixer_type="x_equals_y",
+    )
+
+    parameters = [
+        torch.tensor(value, dtype=torch.float64, requires_grad=True)
+        for value in [0.1, 0.2, 0.3, 0.4]
+    ]
+
+    unpacked = uqaoa.unpack_parameters(parameters, depth=2)
+    betas = unpacked["betas"]
+    alphas = unpacked["alphas"]
+
+    assert isinstance(betas, list)
+    assert isinstance(alphas, list)
+    assert betas is not alphas
+
+    assert torch.allclose(
+        torch.stack(alphas),
+        torch.tensor([0.3, 0.4], dtype=torch.float64),
+    )
+
+    # Only the container is copied; the scalar tensors remain shared.
+    for beta, alpha, original in zip(betas, alphas, parameters[2:]):
+        assert beta is original
+        assert alpha is original
+
+    # Both output blocks contribute gradients to the original parameters.
+    loss = (
+        torch.stack(unpacked["gammas"]).sum()
+        + torch.stack(betas).sum()
+        + torch.stack(alphas).sum()
+    )
+    loss.backward()
+
+    for parameter, expected_grad in zip(parameters, [1.0, 1.0, 2.0, 2.0]):
+        assert parameter.grad is not None
+        assert parameter.grad.item() == pytest.approx(expected_grad)
+
+
+def test_unpack_parameters_ma_per_edge_requires_graph(monkeypatch):
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(
+        qubo,
+        variant="ma",
+        ma_parameter_type=ParameterType.PER_QUBIT,
+    )
+
+    uqaoa.ma_parameter_type = ParameterType.PER_EDGE
+    uqaoa.graph = None
+
+    # Bypass parameter counting to isolate the unpacking guard.
+    monkeypatch.setattr(uqaoa, "get_param_count", lambda depth: 1)
+
+    with pytest.raises(ValueError, match="Graph required for per-edge MA-QAOA"):
+        uqaoa.unpack_parameters([0.1], depth=1)
+
+
+def test_unpack_parameters_ma_rejects_unknown_parameter_type(monkeypatch):
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(
+        qubo,
+        variant="ma",
+        ma_parameter_type=ParameterType.PER_QUBIT,
+    )
+
+    uqaoa.ma_parameter_type = "unsupported"
+
+    # Bypass parameter counting to isolate the unpacking guard.
+    monkeypatch.setattr(uqaoa, "get_param_count", lambda depth: 1)
+
+    with pytest.raises(ValueError, match="Unknown MA parameter type"):
+        uqaoa.unpack_parameters([0.1], depth=1)
+
+
+@pytest.mark.parametrize(
+    "parameter_type",
+    [ParameterType.PER_QUBIT, ParameterType.PER_EDGE],
+)
+def test_unpack_parameters_ma_with_torch(parameter_type):
+    torch = pytest.importorskip("torch")
+    nx = pytest.importorskip("networkx")
+
+    qubo = _make_qubo()
+    graph = nx.complete_graph(qubo.n)
+
+    uqaoa = UnifiedQAOA(
+        qubo,
+        variant="ma",
+        ma_parameter_type=parameter_type,
+        graph=graph,
+    )
+
+    depth = 2
+    mixer_count = (
+        qubo.n if parameter_type == ParameterType.PER_QUBIT else graph.number_of_edges()
+    )
+    params_per_layer = 1 + mixer_count
+
+    parameters = torch.arange(
+        depth * params_per_layer,
+        dtype=torch.float64,
+        requires_grad=True,
+    )
+
+    unpacked = uqaoa.unpack_parameters(parameters, depth=depth)
+
+    assert isinstance(unpacked["gammas"], list)
+    assert isinstance(unpacked["betas"], list)
+    assert len(unpacked["gammas"]) == depth
+    assert len(unpacked["betas"]) == depth
+
+    for layer in range(depth):
+        start = layer * params_per_layer
+
+        assert torch.equal(
+            unpacked["gammas"][layer],
+            parameters[start],
+        )
+        assert torch.equal(
+            unpacked["betas"][layer],
+            parameters[start + 1 : start + params_per_layer],
+        )
+
+    loss = torch.stack(unpacked["gammas"]).sum() + sum(
+        beta_block.sum() for beta_block in unpacked["betas"]
+    )
+    loss.backward()
+
+    assert parameters.grad is not None
+    assert torch.equal(parameters.grad, torch.ones_like(parameters))
+
+
+def test_apply_mixer_adds_non_callable_custom_mixer():
+    class RecordingCircuit:
+        def __init__(self):
+            self.added = []
+
+        def __iadd__(self, other):
+            self.added.append(other)
+            return self
+
+    qubo = _make_qubo()
+    mixer = object()  # not callable
+    uqaoa = UnifiedQAOA(qubo, variant="standard", custom_mixer=[mixer])
+
+    circuit = RecordingCircuit()
+    uqaoa._apply_mixer(circuit, layer=0, param_dict={"betas": [0.1]}, depth=1)
+
+    assert circuit.added == [mixer]
+
+
 def test_linear_initialization():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])
