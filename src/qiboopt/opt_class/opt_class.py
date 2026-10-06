@@ -4,7 +4,9 @@ Optimisation classes
 
 import inspect
 import itertools
+import warnings
 from collections import defaultdict
+from enum import Enum
 
 import numpy as np
 from qibo import Circuit, gates, hamiltonians
@@ -18,7 +20,8 @@ from qibo.symbols import Z
 
 class QUBO:
     """Initializes a ``QUBO`` class. The ``QUBO`` class can be multiplied by a scalar factor, and multiple ``QUBO``
-    instances can be added together.
+    instances can be added together. The class supports QUBO and Ising-style input data, construction of variations of
+    QAOA circuits from QUBO.
 
     Args:
         offset (float): Constant offset of the QUBO problem.
@@ -199,6 +202,7 @@ class QUBO:
         betas,
         alphas=None,
         custom_mixer=None,
+        initial_state=None,
         include_measurements=True,
         density_matrix=False,
     ):
@@ -208,59 +212,24 @@ class QUBO:
             If len(custom_mixer) == 1, then use this one circuit as mixer for all layers.
             If len(custom_mixer) == len(gammas), then use each circuit as mixer for each layer.
             If len(custom_mixer) != 1 and != len(gammas), raise an error.
+        This code is retain for backward compatibilty.
         """
-        p = len(gammas)
-
-        # Apply initial Hadamard gates (uniform superposition)
-        circuit = Circuit(self.n, density_matrix=density_matrix)
-        circuit.add(gates.H(i) for i in range(self.n))
-
-        for layer in range(p):
-            self._phase_separation(
-                circuit, gammas[layer]
-            )  # Phase separation (Ising model encoding)
-            if alphas is not None:
-                self._default_mixer(circuit, betas[layer], alphas[layer])
-            else:
-                if custom_mixer:
-                    if len(gammas) != len(betas):
-                        raise_error(
-                            ValueError, f"Input {len(gammas) = } != {len(betas) = }."
-                        )
-
-                    # Extract number of betas per layer
-                    betas_per_layer = len(betas) // p
-                    if (
-                        custom_mixer[0](
-                            betas[
-                                layer * betas_per_layer : (layer + 1) * betas_per_layer
-                            ]
-                        ).density_matrix
-                        != circuit.density_matrix
-                    ):
-                        raise_error(
-                            ValueError,
-                            f"Ensure density_matrix in custom_mixer is the same as density_matrix argument in QAOA circuit.",
-                        )
-                    if len(custom_mixer) == 1:
-                        circuit += custom_mixer[0](
-                            betas[
-                                layer * betas_per_layer : (layer + 1) * betas_per_layer
-                            ]
-                        )
-                    elif len(custom_mixer) == len(gammas):
-                        circuit += custom_mixer[layer](
-                            betas[
-                                layer * betas_per_layer : (layer + 1) * betas_per_layer
-                            ]
-                        )
-                else:
-                    self._default_mixer(circuit, betas[layer])
-
-        if include_measurements:
-            circuit.add(gates.M(i) for i in range(self.n))
-
-        return circuit
+        variant = "xqaoa" if alphas is not None else "standard"
+        uqaoa = UnifiedQAOA(
+            self,
+            variant=variant,
+            custom_mixer=custom_mixer,
+            initial_state=initial_state,
+        )
+        params = list(gammas) + list(betas)
+        if alphas is not None:
+            params += list(alphas)
+        return uqaoa.build_circuit(
+            params,
+            depth=len(gammas),
+            include_measurements=include_measurements,
+            density_matrix=density_matrix,
+        )
 
     def qubo_to_ising(self):
         """Convert a QUBO problem to an Ising problem.
@@ -390,36 +359,36 @@ class QUBO:
     def tabu_search(self, max_iterations=100, tabu_size=10):
         """Solves the QUBO problem using the Tabu search algorithm.
 
-        Args:
-            max_iterations (int): Maximum number of iterations to run the Tabu search.
-                Defaults to 100.
-            tabu_size (int): Size of the Tabu list.
+                Args:
+                    max_iterations (int): Maximum number of iterations to run the Tabu search.
+                        Defaults to 100.
+                    tabu_size (int): Size of the Tabu list.
 
-        Returns:
-            (list, float): A list of integers representing the best binary vector found and its corresponding value
+                Returns:
+                    (list, float): A list of integers representing the best binary vector found and its corresponding value
 
-        Example:
-            .. testcode::
+                Example:
+                    .. testcode::
 
-                from qiboopt.opt_class.opt_class import QUBO
+                        from qiboopt.opt_class.opt_class import QUBO
 
 
-                Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp = QUBO(0, Qdict)
-                best_solution, best_obj_value = qp.tabu_search(50, 5)
-                print(best_solution)
+                        Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+                        qp = QUBO(0, Qdict)
+                        best_solution, best_obj_value = qp.tabu_search(50, 5)
+                        print(best_solution)
 
-            .. testoutput::
+                    .. testoutput::
 
-                [0 1]
+                        [0 1]
 
-            .. testcode::
+                    .. testcode::
 
-                print(best_obj_value)
+                        print(best_obj_value)
+        f
+                    .. testoutput::
 
-            .. testoutput::
-
-                -1.0
+                        -1.0
         """
         x = np.random.randint(2, size=self.n)  # Initial solution
         best_solution = x.copy()
@@ -502,6 +471,8 @@ class QUBO:
         self.Qdict = Qdict
         return self.Qdict
 
+    # ---------- Deprecated: delegates to UnifiedQAOA internally ---------- #
+
     def qubo_to_qaoa_circuit(
         self,
         gammas,
@@ -530,6 +501,8 @@ class QUBO:
         Returns:
             :class:`qibo.models.Circuit`: The QAOA or XQAOA circuit corresponding to the QUBO problem.
         """
+        # Preserve exact legacy behaviour
+
         if alphas is not None:  # Use XQAOA, ignore mixer_function
             circuit = self._build(
                 gammas,
@@ -638,296 +611,41 @@ class QUBO:
         epochs=100,
         differentiation=None,
     ):
+        """Train QAOA.
+
+        .. deprecated::
+            Use ``qubo.to_unified_qaoa().train(...)`` instead.
+
+        Returns the same tuple as before for full backward compatibility.
         """
-        Constructs the QAOA or XQAOA circuit with optional parameters for the mixers or phases before using a classical
-        optimiser to search for the optimal parameters which minimise the cost function (either expected value or
-        Conditional Variance at Risk (CVaR).
+        # Determine variant from alphas
+        variant = "xqaoa" if alphas is not None else "standard"
+        mixer_type = "xy" if alphas is not None else None
 
-        Args:
-            gammas (List[float], optional): parameters for phasers.
-            betas  (List[float], optional): parameters for X mixers.
-            alphas (List[float], optional): parameters for Y mixers for XQAOA. Defaults to None.
-            p (int, optional): number of layers.
-            nshots (int, optional): Number of shots for sampled execution.
-                If ``None`` or ``0``, uses exact (no-shot) execution.
-            regular_loss (Bool, optional): If False, Conditional Variance at Risk (CVaR) is used as cost function.
-                Defaults to True, where expected value is used as cost function.
-            maxiter (int, optional): Maximum number of iterations used in the minimiser. Defaults to 10.
-            cvar_delta (float, optional): Represents the quantile threshold used for calculating the CVaR. Defaults to
-                `0.25`.
-            custom_mixer (List[:class:`qibo.models.Circuit`]): optional argument that takes as input custom mixers.
-                If len(custom_mixer) == 1, then use this one circuit as mixer for all layers.
-                If len(custom_mixer) == len(gammas), then use each circuit as mixer for each layer.
-                If len(custom_mixer) != 1 and != len(gammas), raise an error.
-            density_matrix (bool): Enables `density_matrix` argument when constructing QAOA circuits to allow
-                :class:`qibo.noise.NoiseModel` to be added to the circuit. Defaults to ``False``.
-            backend (:class:`qibo.backends.abstract.Backend`, optional): backend to be used in the execution.
-                If ``None``, it uses the current backend. Defaults to ``None``.
-            noise_model (:class:`qibo.noise.NoiseModel`, optional): noise model applied to simulate noisy computations.
-                Defaults to None.
-            engine (str, optional): Training engine. ``"legacy"`` uses ``qibo.optimizers.optimize``.
-                ``"qiboml"`` uses qiboml's pytorch ``QuantumModel`` training loop. Defaults to ``"legacy"``.
-            optimizer (str, optional): Optimizer name used when ``engine="qiboml"``.
-                Supported values are ``"adam"`` and ``"sgd"``. Defaults to ``"adam"``.
-            lr (float, optional): Learning rate used when ``engine="qiboml"``.
-                Defaults to ``0.05``.
-            epochs (int, optional): Number of optimization steps used when ``engine="qiboml"``.
-                Defaults to ``100``.
-            differentiation (str, optional): Differentiation backend used when ``engine="qiboml"``.
-                Supported values are ``None``, ``"PSR"``, ``"Jax"``, and ``"Adjoint"``.
-                Defaults to ``None``.
-
-        Returns:
-            Tuple[float, List[float], dict, :class:`qibo.models.Circuit`, dict]: A tuple containing:
-                - best (float): The lowest cost value achieved.
-                - params (List[float]): Optimised QAOA parameters.
-                - extra (dict): Additional metadata (e.g., convergence info).
-                - circuit (:class:`qibo.models.Circuit`): Final circuit used for evaluation.
-                - frequencies (dict): Bitstring outcome statistics.
-                  In sampled mode (``nshots`` > 0), values are counts.
-                  In exact mode (``nshots`` is ``None`` or ``0``), values are probabilities.
-
-        Example:
-            .. testcode::
-
-                from qiboopt.opt_class.opt_class import QUBO
-
-                Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
-                qp = QUBO(0, Qdict)
-                opt_vector, min_value = qp.brute_force()
-
-                # Train regular QAOA
-                output = QUBO(0, Qdict).train_QAOA(p=10)
-        """
-
-        backend = _check_backend(backend)
-        use_exact = (nshots is None) or (nshots == 0)
-
-        if p is None and gammas is None:
-            raise_error(
-                ValueError,
-                "Either p or gammas must be provided to define the number of layers.",
-            )
-        elif p is None:
-            p = len(gammas)
-
-        elif gammas is None:
-            # if no gammas are provided, we randomly generate them to be between 0 and 2pi
-            gammas = np.random.rand(p) * 2 * np.pi
-            betas = np.random.rand(p) * 2 * np.pi
-        else:
-            if len(gammas) != p:
-                raise_error(
-                    ValueError,
-                    f"gammas must be of length {p}, but got {len(gammas)}.",
-                )
-
-        self.n_layers = p
-        self.num_betas = len(betas)
-        has_alphas = alphas is not None
-
-        parameters = list(gammas) + list(betas)
-        if has_alphas:
-            parameters += list(alphas)
-
-        if engine not in ("legacy", "qiboml"):
-            raise_error(
-                ValueError,
-                f"Unsupported engine '{engine}'. Use 'legacy' or 'qiboml'.",
-            )
-
-        if not regular_loss and not (0 < cvar_delta <= 1):
-            raise_error(
-                ValueError,
-                f"cvar_delta must satisfy 0 < cvar_delta <= 1, but got {cvar_delta}.",
-            )
-        if engine == "qiboml" and not regular_loss:
-            import warnings
-
-            warnings.warn(
-                "engine='qiboml' does not yet support CVaR loss (regular_loss=False). "
-                "Falling back to engine='legacy'.",
-                UserWarning,
-                stacklevel=2,
-            )
-            engine = "legacy"
-
-        def _probability_dict_from_state(result):
-            probabilities = np.asarray(result.probabilities()).ravel()
-            return {
-                format(index, f"0{self.n}b"): float(probability)
-                for index, probability in enumerate(probabilities)
-                if probability > 0
-            }
-
-        if use_exact:
-            _hamiltonian = self.qubo_to_qaoa_object().hamiltonian
-
-        if regular_loss:
-
-            def myloss(parameters):
-                """
-                Computes the expectation value as loss.
-
-                Args:
-                    parameters (List[float]): Parameters used in the circuit.
-
-                Returns:
-                    loss (float): The computed expectation value.
-                """
-
-                circuit = self.qaoa_circuit_from_parameters(
-                    parameters=parameters,
-                    p=p,
-                    custom_mixer=custom_mixer,
-                    include_measurements=not use_exact,
-                    has_alphas=has_alphas,
-                    density_matrix=density_matrix,
-                )
-                if noise_model is not None:
-                    if not density_matrix:
-                        raise_error(
-                            ValueError,
-                            f"noise_model requires density_matrix=True.",
-                        )
-                    circuit = noise_model.apply(circuit)
-
-                if use_exact:
-                    return _hamiltonian.expectation(circuit, nshots=None)
-
-                result = backend.execute_circuit(circuit, nshots=nshots)
-                result_counter = result.frequencies(binary=True)
-                energy_dict = defaultdict(int)
-                for key in result_counter:
-                    x = [int(sub_key) for sub_key in key]
-                    energy_dict[self.evaluate_f(x)] += result_counter[key]
-                loss = sum(key * energy_dict[key] / nshots for key in energy_dict)
-                return loss
-
-        else:
-
-            def myloss(parameters, delta=cvar_delta):
-                """
-                Computes the CVaR of the energy distribution for a given quantile threshold `delta`.
-
-                Args:
-                    parameters (List[float]): Parameters used in the circuit.
-                    delta (float): Quantile threshold for CVaR (defaults to 0.25)
-
-                Returns:
-                    cvar (float): The computed CVaR value.
-                """
-                circuit = self.qaoa_circuit_from_parameters(
-                    parameters=parameters,
-                    p=p,
-                    custom_mixer=custom_mixer,
-                    include_measurements=not use_exact,
-                    has_alphas=has_alphas,
-                    density_matrix=density_matrix,
-                )
-                if noise_model is not None:
-                    if not density_matrix:
-                        raise_error(
-                            ValueError,
-                            "noise_model requires density_matrix=True.",
-                        )
-                    circuit = noise_model.apply(circuit)
-                if use_exact:
-                    result = backend.execute_circuit(circuit)
-                    result_probs = _probability_dict_from_state(result)
-                    energy_probs = defaultdict(float)
-                    for key, probability in result_probs.items():
-                        x = [int(sub_key) for sub_key in key]
-                        energy_probs[self.evaluate_f(x)] += probability
-                else:
-                    result = backend.execute_circuit(circuit, nshots=nshots)
-                    result_counter = result.frequencies(binary=True)
-
-                    energy_dict = defaultdict(int)
-                    for key in result_counter:
-                        # key is the binary string, value is the frequency
-                        x = [int(sub_key) for sub_key in key]
-                        energy_dict[self.evaluate_f(x)] += result_counter[key]
-
-                    # Normalize frequencies to probabilities
-                    total_counts = sum(energy_dict.values())
-                    energy_probs = {
-                        key: value / total_counts for key, value in energy_dict.items()
-                    }
-
-                # Sort energies and compute cumulative probability
-                sorted_energies = sorted(
-                    energy_probs.items()
-                )  # List of (energy, probability)
-                cumulative_prob = 0
-                selected_energies = []
-
-                for energy, prob in sorted_energies:
-                    if cumulative_prob + prob > delta:
-                        # Include only the fraction of the probability needed to reach `cvar_delta`
-                        excess_prob = delta - cumulative_prob
-                        selected_energies.append((energy, excess_prob))
-                        cumulative_prob = delta
-                        break
-                    selected_energies.append((energy, prob))
-                    cumulative_prob += prob
-
-                # Compute CVaR as weighted average of selected energies
-                cvar = sum(energy * prob for energy, prob in selected_energies) / delta
-                return cvar
-
-        if engine == "qiboml":
-            from qiboopt.integrations.qiboml_adapter import optimize_qaoa_with_qiboml
-
-            best, params, extra = optimize_qaoa_with_qiboml(
-                qubo=self,
-                parameters=parameters,
-                p=p,
-                nshots=nshots,
-                noise_model=noise_model,
-                custom_mixer=custom_mixer,
-                has_alphas=has_alphas,
-                optimizer=optimizer,
-                lr=lr,
-                epochs=epochs,
-                differentiation=differentiation,
-                backend=backend,
-                density_matrix=density_matrix,
-            )
-        else:
-            best, params, extra = optimize(
-                myloss, parameters, method=method, options={"maxiter": maxiter}
-            )
-
-        circuit = self.qaoa_circuit_from_parameters(
-            parameters=params,
-            p=p,
+        uqaoa = self.to_unified_qaoa(
+            variant=variant,
+            mixer_type=mixer_type,
             custom_mixer=custom_mixer,
-            include_measurements=not use_exact,
-            has_alphas=has_alphas,
-            density_matrix=density_matrix,
         )
-        original_circuit = Circuit.copy(circuit)
-        if noise_model is not None:
-            circuit = noise_model.apply(circuit)
-
-        if use_exact:
-            result = backend.execute_circuit(circuit)
-            statistics = _probability_dict_from_state(result)
-        else:
-            result = backend.execute_circuit(circuit, nshots=nshots)
-            statistics = result.frequencies(binary=True)
-
-        if noise_model is not None:
-            return (
-                best,
-                params,
-                extra,
-                circuit,
-                statistics,
-                original_circuit,
-            )
-        return best, params, extra, circuit, statistics
+        return uqaoa.train(
+            gammas=gammas,
+            betas=betas,
+            alphas=alphas,
+            p=p,
+            nshots=nshots,
+            regular_loss=regular_loss,
+            maxiter=maxiter,
+            method=method,
+            cvar_delta=cvar_delta,
+            density_matrix=density_matrix,
+            backend=backend,
+            noise_model=noise_model,
+            engine=engine,
+            optimizer=optimizer,
+            lr=lr,
+            epochs=epochs,
+            differentiation=differentiation,
+        )
 
     def qubo_to_qaoa_object(self, params: list = None):
         """
@@ -956,6 +674,692 @@ class QUBO:
         if params is not None:
             qaoa.set_parameters(np.array(params))
         return qaoa
+
+    def to_unified_qaoa(
+        self, variant="standard", normalize=False, normalization="max", **kwargs
+    ):
+        """Create a :class:`UnifiedQAOA` from this QUBO.
+
+        Args:
+            variant (str): QAOA variant (``"standard"``, ``"xqaoa"``,
+                ``"lr"``, ``"ma"``).
+            normalized (bool): determine whether to perform normalization for the Ising
+            normalization (str): either "h", "J", or "max" to determine the normalization scheme
+            **kwargs: Forwarded to :class:`UnifiedQAOA`.
+
+        Returns:
+            :class:`UnifiedQAOA`
+        """
+        qubo = self
+        if normalize:
+            qubo, scale = self.normalized(normalization)
+            kwargs["hamiltonian_scale"] = scale
+        return UnifiedQAOA(qubo, variant=variant, **kwargs)
+
+    def normalized(self, normalization="max"):
+        """
+        normalized the Ising coefficients via max of j, max of J, or max of both.
+        This is a common practice for LR-QAOA.
+        Args:
+            normalization (str): ("h", "J", "max").
+
+        Returns:
+            tuple{QUBO, float]: (normalized_QUBO, scale)
+
+        """
+        max_h = max((abs(v) for v in self.h.values()), default=0.0)
+        max_J = max((abs(v) for v in self.J.values()), default=0.0)
+
+        if normalization == "J":
+            scale = max_J
+        elif normalization == "h":
+            scale = max_h
+        elif normalization == "max":
+            scale = max(max_h, max_J)
+        else:
+            raise ValueError("normalization must be one of 'J", "h" or "max")
+        if scale == 0:
+            scale = 1.0
+        h_norm = {k: v / scale for k, v in self.h.items()}
+        J_norm = {k: v / scale for k, v in self.J.items()}
+        normalized_qubo = QUBO(self.offset / scale, h_norm, J_norm)
+        return normalized_qubo, scale
+
+
+class MixerType(Enum):
+    """XQAOA mixer variant types."""
+
+    XY = "xy"  # Full XQAOA with RX + RY
+    X_EQUALS_Y = "x_equals_y"  # Constrained: alpha = beta
+    Y = "y"  # Pure Y-rotation: beta = 0
+    X = "x"  # Pure X-rotation: alpha = 0
+
+
+class ParameterType(Enum):
+    """MA-QAOA parameter type."""
+
+    PER_QUBIT = "per_qubit"
+    PER_EDGE = "per_edge"
+
+
+class UnifiedQAOA:
+    """Unified QAOA implementation supporting Standard, XQAOA, LR-QAOA, and MA-QAOA.
+
+    Takes a :class:`QUBO` instance and builds the corresponding QAOA circuit for
+    the chosen variant.
+
+    Args:
+        qubo (:class:`QUBO`): The QUBO problem instance.
+        variant (str): One of ``"standard"``, ``"xqaoa"``, ``"lr"``, ``"ma"``.
+        mixer_type (str, optional): For ``variant="xqaoa"``: ``"xy"``, ``"x_equals_y"``,
+            ``"y"``, or ``"x"``.
+        ma_parameter_type (str, optional): For ``variant="ma"``: ``"per_qubit"`` or
+            ``"per_edge"``.
+        graph (optional): Graph with an ``edges`` attribute. Required for
+            ``ma_parameter_type="per_edge"``.
+        initial_state (:class:`qibo.models.Circuit`, optional): Circuit that prepares
+            the initial state.  When ``None`` (default), Hadamard gates on every qubit
+            are used.
+        hamiltonian_scale (float, optional): Scale factor used to normalize the Ising Hamiltonian,
+            especially for LR-QAOA
+        custom_mixer: An optional callable or list of :class:`qibo.models.Circuit`.
+            If a single-element list, the same mixer is reused for every layer.
+            If its length equals the depth, each element is used for the corresponding
+            layer.
+
+    Example:
+        .. testcode::
+
+            from qiboopt.opt_class.opt_class import QUBO, UnifiedQAOA
+            import numpy as np
+
+            Qdict = {(0, 0): 1.0, (0, 1): 0.5, (1, 1): -1.0}
+            qp = QUBO(0, Qdict)
+
+            qaoa = UnifiedQAOA(qp, variant="standard")
+            params = np.random.rand(qaoa.get_param_count(depth=3)) * 2 * np.pi
+            circuit = qaoa.build_circuit(params, depth=3)
+    """
+
+    def __init__(
+        self,
+        qubo,
+        variant="standard",
+        mixer_type=None,
+        ma_parameter_type=None,
+        graph=None,
+        initial_state=None,
+        hamiltonian_scale=1.0,
+        custom_mixer=None,
+    ):
+        if not isinstance(qubo, QUBO):
+            raise_error(TypeError, "qubo must be an instance of QUBO.")
+
+        self.qubo = qubo
+        self.n = qubo.n
+        self.variant = variant.lower()
+        self.graph = graph
+        self.initial_state = initial_state
+        self.hamiltonian_scale = hamiltonian_scale
+        self.custom_mixer = custom_mixer
+
+        if self.variant == "xqaoa":
+            self.mixer_type = MixerType(mixer_type or "xy")
+        elif self.variant == "ma":
+            self.ma_parameter_type = ParameterType(ma_parameter_type or "per_qubit")
+        elif self.variant != "standard" and self.variant != "lr":
+            raise_error(
+                ValueError,
+                f"Unknown variant '{self.variant}'. "
+                "Choose from 'standard', 'xqaoa', 'lr', 'ma'.",
+            )
+
+    # ------------------------------------------------------------------ #
+    #  Parameter helpers                                                  #
+    # ------------------------------------------------------------------ #
+
+    def train(
+        self,
+        gammas=None,
+        betas=None,
+        alphas=None,
+        p=None,
+        nshots=int(1e3),
+        regular_loss=True,
+        maxiter=10,
+        method="cobyla",
+        cvar_delta=0.25,
+        density_matrix=False,
+        backend=None,
+        noise_model=None,
+        engine="legacy",
+        optimizer="adam",
+        lr=0.05,
+        epochs=100,
+        differentiation=None,
+    ):
+        backend = _check_backend(backend)
+        use_exact = (nshots is None) or (nshots == 0)
+
+        if p is None and gammas is None:
+            raise_error(
+                ValueError,
+                "Either p or gammas must be provided to define the number of layers.",
+            )
+        elif p is None:
+            p = len(gammas)
+        elif gammas is None:
+            gammas = np.random.rand(p) * 2 * np.pi
+            betas = np.random.rand(p) * 2 * np.pi
+        else:
+            if len(gammas) != p:
+                raise_error(
+                    ValueError,
+                    f"gammas must be of length {p}, but got {len(gammas)}.",
+                )
+
+        if betas is None:
+            raise_error(ValueError, "betas must be provided when gammas are given.")
+
+        has_alphas = alphas is not None
+        parameters = list(gammas) + list(betas)
+        if has_alphas:
+            parameters += list(alphas)
+
+        if engine not in ("legacy", "qiboml"):
+            raise_error(
+                ValueError,
+                f"Unsupported engine '{engine}'. Use 'legacy' or 'qiboml'.",
+            )
+
+        if not regular_loss and not (0 < cvar_delta <= 1):
+            raise_error(
+                ValueError,
+                f"cvar_delta must satisfy 0 < cvar_delta <= 1, but got {cvar_delta}.",
+            )
+
+        if engine == "qiboml" and not regular_loss:
+            warnings.warn(
+                "engine='qiboml' does not yet support CVaR loss (regular_loss=False). "
+                "Falling back to engine='legacy'.",
+                UserWarning,
+                stacklevel=2,
+            )
+            engine = "legacy"
+
+        def _probability_dict_from_state(result):
+            probabilities = np.asarray(result.probabilities()).ravel()
+            return {
+                format(index, f"0{self.n}b"): float(probability)
+                for index, probability in enumerate(probabilities)
+                if probability > 0
+            }
+
+        if use_exact:
+            _hamiltonian = self.qubo.qubo_to_qaoa_object().hamiltonian
+
+        def _circuit_from_flat(params, include_measurements):
+            return self.qubo.qaoa_circuit_from_parameters(
+                parameters=params,
+                p=p,
+                custom_mixer=self.custom_mixer,
+                include_measurements=include_measurements,
+                has_alphas=has_alphas,
+                density_matrix=density_matrix,
+            )
+
+        if regular_loss:
+
+            def myloss(parameters):
+                circuit = _circuit_from_flat(
+                    parameters, include_measurements=not use_exact
+                )
+                if noise_model is not None:
+                    if not density_matrix:
+                        raise_error(
+                            ValueError, "noise_model requires density_matrix=True."
+                        )
+                    circuit = noise_model.apply(circuit)
+
+                if use_exact:
+                    return _hamiltonian.expectation(circuit, nshots=None)
+
+                result = backend.execute_circuit(circuit, nshots=nshots)
+                result_counter = result.frequencies(binary=True)
+                energy_dict = defaultdict(int)
+                for key in result_counter:
+                    x = [int(sub_key) for sub_key in key]
+                    energy_dict[self.qubo.evaluate_f(x)] += result_counter[key]
+                return sum(key * energy_dict[key] / nshots for key in energy_dict)
+
+        else:
+
+            def myloss(parameters, delta=cvar_delta):
+                circuit = _circuit_from_flat(
+                    parameters, include_measurements=not use_exact
+                )
+                if noise_model is not None:
+                    if not density_matrix:
+                        raise_error(
+                            ValueError, "noise_model requires density_matrix=True."
+                        )
+                    circuit = noise_model.apply(circuit)
+
+                if use_exact:
+                    result = backend.execute_circuit(circuit)
+                    result_probs = _probability_dict_from_state(result)
+                    energy_probs = defaultdict(float)
+                    for key, probability in result_probs.items():
+                        x = [int(sub_key) for sub_key in key]
+                        energy_probs[self.qubo.evaluate_f(x)] += probability
+                else:
+                    result = backend.execute_circuit(circuit, nshots=nshots)
+                    result_counter = result.frequencies(binary=True)
+                    energy_dict = defaultdict(int)
+                    for key in result_counter:
+                        x = [int(sub_key) for sub_key in key]
+                        energy_dict[self.qubo.evaluate_f(x)] += result_counter[key]
+                    total_counts = sum(energy_dict.values())
+                    energy_probs = {
+                        key: value / total_counts for key, value in energy_dict.items()
+                    }
+
+                sorted_energies = sorted(energy_probs.items())
+                cumulative_prob = 0
+                selected_energies = []
+
+                for energy, prob in sorted_energies:
+                    if cumulative_prob + prob > delta:
+                        excess_prob = delta - cumulative_prob
+                        selected_energies.append((energy, excess_prob))
+                        cumulative_prob = delta
+                        break
+                    selected_energies.append((energy, prob))
+                    cumulative_prob += prob
+
+                return sum(energy * prob for energy, prob in selected_energies) / delta
+
+        if engine == "qiboml":
+            from qiboopt.integrations.qiboml_adapter import optimize_qaoa_with_qiboml
+
+            best, params, extra = optimize_qaoa_with_qiboml(
+                qubo=self.qubo,
+                parameters=parameters,
+                p=p,
+                nshots=nshots,
+                noise_model=noise_model,
+                custom_mixer=self.custom_mixer,
+                has_alphas=has_alphas,
+                optimizer=optimizer,
+                lr=lr,
+                epochs=epochs,
+                differentiation=differentiation,
+                backend=backend,
+                density_matrix=density_matrix,
+            )
+        else:
+            best, params, extra = optimize(
+                myloss, parameters, method=method, options={"maxiter": maxiter}
+            )
+
+        circuit = _circuit_from_flat(params, include_measurements=not use_exact)
+        original_circuit = Circuit.copy(circuit)
+
+        if noise_model is not None:
+            circuit = noise_model.apply(circuit)
+
+        if use_exact:
+            result = backend.execute_circuit(circuit)
+            statistics = _probability_dict_from_state(result)
+        else:
+            result = backend.execute_circuit(circuit, nshots=nshots)
+            statistics = result.frequencies(binary=True)
+
+        if noise_model is not None:
+            return best, params, extra, circuit, statistics, original_circuit
+        return best, params, extra, circuit, statistics
+
+    def get_param_count(self, depth):
+        """Return the number of optimisation parameters for a given *depth*.
+
+        Args:
+            depth (int): Number of QAOA layers.
+
+        Returns:
+            int: Total parameter count.
+        """
+        if self.variant == "standard":
+            return 2 * depth
+
+        if self.variant == "xqaoa":
+            return 3 * depth if self.mixer_type == MixerType.XY else 2 * depth
+
+        if self.variant == "lr":
+            return 2
+
+        if self.variant == "ma":
+            if self.ma_parameter_type == ParameterType.PER_QUBIT:
+                return depth * (1 + self.n)
+            if self.ma_parameter_type == ParameterType.PER_EDGE:
+                if self.graph is None:
+                    raise_error(ValueError, "Graph required for per-edge MA-QAOA.")
+                n_edges = (
+                    len(self.graph.edges)
+                    if hasattr(self.graph, "edges")
+                    else len(self.graph)
+                )
+                return depth * (1 + n_edges)
+
+    def unpack_parameters(self, flat_params, depth):
+        """Convert a flat parameter vector to a variant-specific structure.
+
+        Uses block ordering consistent with the existing QUBO API:
+
+        - standard: ``[gammas..., betas...]``
+        - xqaoa XY: ``[gammas..., betas..., alphas...]``
+        - xqaoa X=Y: ``[gammas..., thetas...]``
+        - xqaoa Y: ``[gammas..., alphas...]``
+        - xqaoa X: ``[gammas..., betas...]``
+        - lr: compact maximum-parameter form, then linearly ramped
+        - ma: per-layer blocks
+
+        Differentiable PyTorch parameters are not converted to NumPy, because
+        converting a tensor with ``requires_grad=True`` to NumPy would break
+        autograd and raise a runtime error.
+
+        Args:
+            flat_params (array-like): Flat parameter vector.
+            depth (int): Number of QAOA layers.
+
+        Returns:
+            dict: Variant-specific parameter arrays or tensor-preserving
+            containers.
+        """
+
+        def _is_torch_value(value):
+            """Check for a PyTorch tensor without importing torch."""
+            value_type = type(value)
+            module = getattr(value_type, "__module__", "")
+            return (
+                module == "torch"
+                or module.startswith("torch.")
+                or (
+                    hasattr(value, "requires_grad")
+                    and hasattr(value, "detach")
+                    and hasattr(value, "grad_fn")
+                )
+            )
+
+        def _contains_torch_values(values):
+            """Detect a tensor or a flat container containing tensors."""
+            if _is_torch_value(values):
+                return True
+
+            try:
+                return any(_is_torch_value(value) for value in values)
+            except TypeError:
+                return False
+
+        is_torch_parameters = _contains_torch_values(flat_params)
+
+        # Preserve differentiable tensors. Keep the original NumPy behavior for
+        # ordinary lists, tuples, and NumPy arrays.
+        if not is_torch_parameters:
+            flat_params = np.asarray(flat_params, dtype=float)
+
+        expected = self.get_param_count(depth)
+        if len(flat_params) != expected:
+            raise_error(
+                ValueError,
+                f"Expected {expected} parameters, got {len(flat_params)}.",
+            )
+
+        param_dict = {}
+
+        if self.variant == "standard":
+            param_dict["gammas"] = flat_params[:depth]
+            param_dict["betas"] = flat_params[depth : 2 * depth]
+
+        elif self.variant == "xqaoa":
+            if self.mixer_type == MixerType.XY:
+                param_dict["gammas"] = flat_params[:depth]
+                param_dict["betas"] = flat_params[depth : 2 * depth]
+                param_dict["alphas"] = flat_params[2 * depth : 3 * depth]
+
+            elif self.mixer_type == MixerType.X_EQUALS_Y:
+                param_dict["gammas"] = flat_params[:depth]
+
+                thetas = flat_params[depth : 2 * depth]
+                param_dict["betas"] = thetas
+
+                # Preserve the existing contract that betas and alphas are
+                # distinct containers, while retaining the autograd graph.
+                if is_torch_parameters:
+                    if hasattr(thetas, "clone"):
+                        param_dict["alphas"] = thetas.clone()
+                    else:
+                        # This handles a Python list containing scalar tensors.
+                        param_dict["alphas"] = list(thetas)
+                else:
+                    param_dict["alphas"] = thetas.copy()
+
+            elif self.mixer_type == MixerType.Y:
+                param_dict["gammas"] = flat_params[:depth]
+                param_dict["alphas"] = flat_params[depth : 2 * depth]
+
+                if is_torch_parameters:
+                    param_dict["betas"] = [0.0] * depth
+                else:
+                    param_dict["betas"] = np.zeros(depth, dtype=float)
+
+            elif self.mixer_type == MixerType.X:
+                param_dict["gammas"] = flat_params[:depth]
+                param_dict["betas"] = flat_params[depth : 2 * depth]
+
+                if is_torch_parameters:
+                    param_dict["alphas"] = [0.0] * depth
+                else:
+                    param_dict["alphas"] = np.zeros(depth, dtype=float)
+
+        elif self.variant == "lr":
+            if depth <= 0:
+                raise_error(ValueError, "depth must be greater than zero.")
+
+            if is_torch_parameters:
+                ramp = [layer / depth for layer in range(1, depth + 1)]
+            else:
+                ramp = np.arange(1, depth + 1, dtype=float) / depth
+
+            gamma_max, beta_max = flat_params
+
+            if is_torch_parameters:
+                param_dict["gammas"] = [gamma_max * ramp_value for ramp_value in ramp]
+                param_dict["betas"] = [beta_max * ramp_value for ramp_value in ramp]
+            else:
+                param_dict["gammas"] = gamma_max * ramp
+                param_dict["betas"] = beta_max * ramp
+        elif self.variant == "ma":
+            params_per_layer = None
+
+            if self.ma_parameter_type == ParameterType.PER_QUBIT:
+                params_per_layer = 1 + self.n
+
+            elif self.ma_parameter_type == ParameterType.PER_EDGE:
+                if self.graph is None:
+                    raise_error(ValueError, "Graph required for per-edge MA-QAOA.")
+
+                n_edges = (
+                    len(self.graph.edges)
+                    if hasattr(self.graph, "edges")
+                    else len(self.graph)
+                )
+                params_per_layer = 1 + n_edges
+
+            if params_per_layer is None:
+                raise_error(
+                    ValueError,
+                    f"Unknown MA parameter type: {self.ma_parameter_type}.",
+                )
+
+            gammas = []
+            betas = []
+
+            for layer in range(depth):
+                start = layer * params_per_layer
+                gammas.append(flat_params[start])
+                betas.append(flat_params[start + 1 : start + params_per_layer])
+
+            if is_torch_parameters:
+                param_dict["gammas"] = gammas
+                param_dict["betas"] = betas
+            else:
+                param_dict["gammas"] = np.asarray(gammas, dtype=float)
+                param_dict["betas"] = np.asarray(betas, dtype=float)
+
+        return param_dict
+
+    def _apply_initial_state(self, circuit):
+        """Prepend the initial-state preparation to *circuit*."""
+        if self.initial_state is not None:
+            circuit += self.initial_state
+        else:
+            circuit.add(gates.H(i) for i in range(self.n))
+
+    def _apply_phase_separation(self, circuit, gamma):
+        """Delegate to the QUBO's phase-separation routine."""
+        self.qubo._phase_separation(circuit, gamma)
+
+    def _apply_mixer(self, circuit, layer, param_dict, depth):
+        """Apply the mixer layer for the current layer."""
+        # --- custom mixer takes priority (except for MA-QAOA) ---
+        if self.custom_mixer is not None and self.variant != "ma":
+            betas = param_dict["betas"]
+            if len(self.custom_mixer) == 1:
+                mixer_fn = self.custom_mixer[0]
+            elif len(self.custom_mixer) == depth:
+                mixer_fn = self.custom_mixer[layer]
+            else:
+                raise ValueError(
+                    f"custom_mixer length must be 1 or {depth}, "
+                    f"got {len(self.custom_mixer)}."
+                )
+
+            if callable(mixer_fn):
+                circuit += mixer_fn(betas[layer])
+            else:
+                circuit += mixer_fn
+            return
+
+        if self.variant == "ma":
+            if self.ma_parameter_type == ParameterType.PER_QUBIT:
+                layer_betas = param_dict["betas"][layer]  # shape (n_qubits,)
+                for i in range(self.n):
+                    circuit.add(gates.RX(i, 2 * layer_betas[i]))
+            elif self.ma_parameter_type == ParameterType.PER_EDGE:
+                # Apply RX with per-edge angle on the target qubit of each edge
+                layer_betas = param_dict["betas"][layer]
+                edge_list = (
+                    list(self.graph.edges)
+                    if hasattr(self.graph, "edges")
+                    else list(self.graph)
+                )
+                for idx, (u, v) in enumerate(edge_list):
+                    circuit.add(gates.RX(v, 2 * layer_betas[idx]))
+            return
+
+        # --- Standard / XQAOA / LR default mixer ---
+        beta = param_dict["betas"][layer]
+        alpha = param_dict.get("alphas")
+        alpha_val = alpha[layer] if alpha is not None else None
+
+        for i in range(self.n):
+            circuit.add(gates.RX(i, 2 * beta))
+            if alpha_val is not None and alpha_val != 0.0:
+                circuit.add(gates.RY(i, 2 * alpha_val))
+
+    def build_circuit(
+        self,
+        parameters,
+        depth,
+        include_measurements=True,
+        density_matrix=False,
+    ):
+        """Build the full QAOA circuit for the chosen variant.
+
+        Args:
+            parameters (array-like): Flat parameter vector whose length must
+                match :meth:`get_param_count(depth)`.
+            depth (int): Number of QAOA layers.
+            include_measurements (bool): Append measurement gates. Defaults
+                to ``True``.
+            density_matrix (bool): Use density-matrix simulation mode.
+                Defaults to ``False``.
+
+        Returns:
+            :class:`qibo.models.Circuit`: The constructed circuit.
+        """
+        param_dict = self.unpack_parameters(parameters, depth)
+
+        circuit = Circuit(self.n, density_matrix=density_matrix)
+
+        # Initial state
+        self._apply_initial_state(circuit)
+
+        # QAOA layers
+        for layer in range(depth):
+            self._apply_phase_separation(circuit, param_dict["gammas"][layer])
+            self._apply_mixer(circuit, layer, param_dict, depth)
+
+        if include_measurements:
+            circuit.add(gates.M(i) for i in range(self.n))
+
+        return circuit
+
+    def random_parameters(self, depth, seed=None):
+        """Sample a random parameter vector uniformly in :math:`[0, 2\\pi)`.
+        Args:
+            depth (int): Number of QAOA layers.
+            seed (int, optional): Random seed.
+        Returns:
+            numpy.ndarray: Random parameter vector.
+        """
+        rng = np.random.default_rng(seed)
+        return rng.uniform(0, 2 * np.pi, size=self.get_param_count(depth))
+
+    def summary(self, depth):
+        """Return a human-readable summary of the configuration.
+
+        Args:
+            depth (int): Circuit depth.
+
+        Returns:
+            str
+        """
+        lines = [
+            "UnifiedQAOA Configuration",
+            "=" * 50,
+            f"Variant           : {self.variant}",
+            f"Number of qubits  : {self.n}",
+            f"Circuit depth     : {depth}",
+            f"Total parameters  : {self.get_param_count(depth)}",
+            f"Custom initial st.: {self.initial_state is not None}",
+            f"Custom mixer      : {self.custom_mixer is not None}",
+        ]
+        if self.variant == "xqaoa":
+            lines.append(f"Mixer type        : {self.mixer_type.value}")
+        elif self.variant == "lr":
+            lines.append(f"LR base variant   : lr")
+            lines.append("Note: parameter count is independent of depth!")
+        elif self.variant == "ma":
+            lines.append(f"MA parameter type : {self.ma_parameter_type.value}")
+            if self.ma_parameter_type == ParameterType.PER_EDGE:
+                n_edges = (
+                    len(self.graph.edges)
+                    if hasattr(self.graph, "edges")
+                    else len(self.graph)
+                )
+                lines.append(f"Number of edges   : {n_edges}")
+        return "\n".join(lines)
 
 
 class LinearProblem:
