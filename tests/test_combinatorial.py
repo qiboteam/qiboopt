@@ -405,7 +405,7 @@ def qaoa_function_of_layer(backend, layer):
     distance_matrix = distance_matrix.round(1)
 
     small_tsp = TSP(distance_matrix, backend=backend)
-    initial_state = small_tsp.prepare_initial_state([i for i in range(num_cities)])
+    initial_state = small_tsp.prepare_initial_state([*range(num_cities)])
     obj_hamil, mixer = small_tsp.hamiltonians()
     qaoa = QAOA(obj_hamil, mixer=mixer)
     initial_state = backend.cast(initial_state, copy=True)
