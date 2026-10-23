@@ -720,9 +720,8 @@ class QUBO:
             raise ValueError("normalization must be one of 'J", "h" or "max")
         if scale == 0:
             scale = 1.0
-        h_norm = {k: v / scale for k, v in self.h.items()}
-        J_norm = {k: v / scale for k, v in self.J.items()}
-        normalized_qubo = QUBO(self.offset / scale, h_norm, J_norm)
+        Q_norm = {k: v / scale for k, v in self.Qdict.items()}
+        normalized_qubo = QUBO(self.offset / scale, Q_norm)
         return normalized_qubo, scale
 
 
@@ -899,12 +898,10 @@ class UnifiedQAOA:
             _hamiltonian = self.qubo.qubo_to_qaoa_object().hamiltonian
 
         def _circuit_from_flat(params, include_measurements):
-            return self.qubo.qaoa_circuit_from_parameters(
+            return self.build_circuit(
                 parameters=params,
-                p=p,
-                custom_mixer=self.custom_mixer,
+                depth=p,
                 include_measurements=include_measurements,
-                has_alphas=has_alphas,
                 density_matrix=density_matrix,
             )
 
