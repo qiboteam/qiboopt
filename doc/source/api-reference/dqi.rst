@@ -41,7 +41,7 @@ register* and an :math:`n`-qubit *solution register*. The procedure is:
    decoder-success branches.
 5. Apply :math:`H^{\otimes n}` on the solution register.
 6. Measure both registers; **post-select** shots whose error register
-   reads :math:`\ket{0^m}` (labelled "postselect on :math:`\ket{0}`" in 
+   reads :math:`\ket{0^m}` (labelled "postselect on :math:`\ket{0}`" in
    Fig. 4 of the paper). The post-selected solution-register samples follow
    the canonical DQI :math:`|P(f)|^2` distribution **iff** the in-circuit
    decoder is exact (no LUT collisions on the Dicke support); see
@@ -78,8 +78,8 @@ brute-force lookup-table (LUT) decoder, and end-to-end :class:`DQISolver`.
   rather than the canonical :math:`|P(f)|^2`; the analytic post-selection
   success probability is reported via
   :attr:`DQISolver.decoder_success_probability`.
-- Achieving Noise robustness remains an open research question; ``DQISolver`` 
-  accepts a Qibo noise model but does not guarantee results retain DQI's 
+- Achieving Noise robustness remains an open research question; ``DQISolver``
+  accepts a Qibo noise model but does not guarantee results retain DQI's
   quantitative properties.
 
 MaxXORSAT
