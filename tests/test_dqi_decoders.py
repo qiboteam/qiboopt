@@ -43,7 +43,7 @@ def test_lut_is_exact_when_full_coverage():
 
 
 def test_lut_is_exact_false_when_collisions():
-    """The reviewer's example: m=3, n=2, ell=2 with B=[[1,0],[0,1],[1,1]]
+    """We consider the  instance: m=3, n=2, ell=2 with B=[[1,0],[0,1],[1,1]]
     has 7 weight-<=2 patterns mapping to only 4 syndromes — collisions
     exist, so is_exact must be False."""
     B = np.array([[1, 0], [0, 1], [1, 1]], dtype=np.uint8)

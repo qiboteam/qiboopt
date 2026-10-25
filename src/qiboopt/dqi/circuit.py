@@ -120,10 +120,10 @@ def dqi_circuit(
     for y, S in decoder_obj.decode_table():
         if not np.any(S):
             # The all-zeros error pattern leaves the error register at |0>;
-            # nothing to uncompute. Skip to avoid emitting useless multi-CX gates.
+            # nothing to uncompute. Skip to avoid emitting redundant multi-CX gates.
             continue
         zero_controls = [m + j for j in range(n) if y[j] == 0]
-        # X-conjugation pre-flip so |0> controls fire as expected.
+        # X-conjugation pre-flip so |0> are activated as expected.
         for q in zero_controls:
             circuit.add(gates.X(q))
         for i in range(m):

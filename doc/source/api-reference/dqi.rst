@@ -28,7 +28,7 @@ register* and an :math:`n`-qubit *solution register*. The procedure is:
 1. Prepare the weighted Dicke superposition
    :math:`\sum_{k=0}^{\ell} w_k \ket{D^m_k}` on the error register, where
    :math:`w` is the principal eigenvector of the tridiagonal matrix
-   :math:`A^{(m, \ell, 0)}` of paper Eq. 70.
+   :math:`A^{(m, \ell, 0)}` of Eq. 70 in the paper.
 2. Apply :math:`Z^{s_i}` to error qubit :math:`i` for each :math:`s_i = 1`,
    where :math:`s` is the right-hand-side target vector.
 3. Reversibly compute :math:`B^\top y` into the solution register via a
@@ -41,8 +41,8 @@ register* and an :math:`n`-qubit *solution register*. The procedure is:
    decoder-success branches.
 5. Apply :math:`H^{\otimes n}` on the solution register.
 6. Measure both registers; **post-select** shots whose error register
-   reads :math:`\ket{0^m}` (paper Fig. 4 caption: "postselect on
-   :math:`\ket{0}`"). The post-selected solution-register samples follow
+   reads :math:`\ket{0^m}` (labelled "postselect on :math:`\ket{0}`" in 
+   Fig. 4 of the paper). The post-selected solution-register samples follow
    the canonical DQI :math:`|P(f)|^2` distribution **iff** the in-circuit
    decoder is exact (no LUT collisions on the Dicke support); see
    :attr:`DQISolver.is_dqi_exact` and
@@ -50,22 +50,27 @@ register* and an :math:`n`-qubit *solution register*. The procedure is:
    diagnostics.
 
 **Where DQI helps.** DQI gives a provable polynomial speedup on the Optimal
-Polynomial Intersection (OPI) family (Section 6 of arXiv:2408.08292) and
+Polynomial Intersection (OPI) family (Section 6 of the paper) and
 heuristic advantage on sparse/LDPC max-LIN. For worst-case generic dense
 max-LINSAT, arXiv:2603.04540 gives tight inapproximability results, so this
 implementation should not be presented as a generic dense max-LIN speedup.
 
 **Phase 1 scope.** Currently implemented: :class:`MaxXORSAT` problem class,
 optimal weight vector, weighted Dicke-state preparation, DQI circuit, the
-brute-force lookup-table decoder, and end-to-end :class:`DQISolver`.
+brute-force lookup-table (LUT) decoder, and end-to-end :class:`DQISolver`.
 
 **Phase 1 limitations.**
 
 - Practical only for ``m + n <= 16`` on a state-vector simulator.
 - The brute-force amplitude-encoded Dicke prep materialises a dense
   :math:`2^m \times 2^m` unitary and is hard-capped at ``m = 12``.
-  Replacing this with a count-register + Bartschi-Eidenbenz construction
-  is a future phase.
+  Replacing this with a count-register construction (the weight register
+  of arXiv:2408.08292 §8.1.2, conditioning a fixed-weight Dicke
+  preparation on its value) built from the deterministic Dicke-state
+  circuits of Bärtschi and Eidenbenz,
+  *Deterministic Preparation of Dicke States*,
+  `arXiv:1904.07358 <https://arxiv.org/abs/1904.07358>`_,
+  *FCT 2019*, LNCS **11651**:126-139, 2019, is a future phase.
 - The LUT decoder is exact only when every weight-:math:`\le \ell` error
   pattern :math:`S` has a distinct syndrome
   (:attr:`LUTDecoder.is_exact`). When the LUT has collisions, the
@@ -73,9 +78,9 @@ brute-force lookup-table decoder, and end-to-end :class:`DQISolver`.
   rather than the canonical :math:`|P(f)|^2`; the analytic post-selection
   success probability is reported via
   :attr:`DQISolver.decoder_success_probability`.
-- Noise robustness is open research; ``DQISolver`` accepts a Qibo noise
-  model but does not guarantee results retain DQI's quantitative
-  properties.
+- Achieving Noise robustness remains an open research question; ``DQISolver`` 
+  accepts a Qibo noise model but does not guarantee results retain DQI's 
+  quantitative properties.
 
 MaxXORSAT
 ^^^^^^^^^

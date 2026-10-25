@@ -19,11 +19,11 @@ DECODER_REGISTRY = {
 }
 
 
-def get_decoder(name, *args, **kwargs):
+def get_decoder(name="lut", *args, **kwargs):
     """Instantiate a registered decoder by name.
 
     Args:
-        name (str): Decoder identifier; currently one of ``"lut"``.
+        name (str): Decoder identifier; currently ``"lut"``.
         args: Forwarded positionally to the decoder constructor.
         kwargs: Forwarded as keywords to the decoder constructor.
 
