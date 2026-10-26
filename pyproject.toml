@@ -50,6 +50,7 @@ optional = true
 [tool.poetry.group.qiboml.dependencies]
 qiboml = ">=0.1"
 torch = "^2.7.0"
+jax = "^0.4.25"
 
 [tool.pytest.ini_options]
 testpaths = ['tests/']
