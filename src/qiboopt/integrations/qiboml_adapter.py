@@ -19,13 +19,11 @@ def _get_differentiation_class(name: str | None):
         return None
 
     try:
-        differentiation_module = importlib.import_module(
-            "qiboml.operations.differentiation"
-        )
+        differentiation_module = importlib.import_module("qiboml.differentiations")
     except ImportError as exc:
         raise ImportError(
             "engine='qiboml' differentiation backend requires "
-            "`qiboml.operations.differentiation`."
+            "`qiboml.differentiations`."
         ) from exc
 
     mapping = {
