@@ -1503,6 +1503,26 @@ def test_unified_qaoa_build_circuit_keeps_callable_custom_mixer():
     assert not any(isinstance(g, gates.RX) for g in circuit.queue)
 
 
+@pytest.mark.parametrize("betas", [[0.3, 0.4], np.array([0.3, 0.4])])
+def test_qubo_to_qaoa_circuit_custom_mixer_receives_legacy_beta_slice(betas):
+    qubo = _make_qubo()
+    received = []
+
+    def mixer(beta):
+        received.append(beta)
+        c = Circuit(qubo.n)
+        c.add(gates.RY(0, beta[0]))
+        return c
+
+    circuit = qubo.qubo_to_qaoa_circuit(
+        [0.1, 0.2], betas, custom_mixer=[mixer], include_measurements=False
+    )
+
+    assert all(type(b) is type(betas) and len(b) == 1 for b in received)
+    ry = [g for g in circuit.queue if isinstance(g, gates.RY)]
+    assert [g.parameters[0] for g in ry] == pytest.approx([0.3, 0.4])
+
+
 def test_linear_initialization():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])

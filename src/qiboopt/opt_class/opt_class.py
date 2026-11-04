@@ -196,6 +196,12 @@ class QUBO:
             if alpha:
                 circuit.add(gates.RY(i, 2 * alpha))
 
+    @staticmethod
+    def _legacy_mixer_adapter(mixer, beta_slice):
+        if isinstance(mixer, Circuit) or not callable(mixer):
+            return mixer
+        return lambda _beta: mixer(beta_slice)
+
     def _build(
         self,
         gammas,
@@ -215,6 +221,17 @@ class QUBO:
         This code is retain for backward compatibilty.
         """
         variant = "xqaoa" if alphas is not None else "standard"
+        depth = len(gammas)
+        if custom_mixer and len(custom_mixer) in (1, depth):
+            # Legacy mixers receive a one-element slice ``beta[layer:layer + 1]``
+            # rather than the scalar passed by UnifiedQAOA
+            custom_mixer = [
+                self._legacy_mixer_adapter(
+                    custom_mixer[0] if len(custom_mixer) == 1 else custom_mixer[layer],
+                    betas[layer : layer + 1],
+                )
+                for layer in range(depth)
+            ]
         uqaoa = UnifiedQAOA(
             self,
             variant=variant,
