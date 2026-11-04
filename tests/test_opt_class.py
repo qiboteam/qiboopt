@@ -1790,3 +1790,61 @@ def test_train_qaoa_still_works_as_wrapper():
     assert isinstance(result[1], np.ndarray)
     assert isinstance(result[3], Circuit)
     assert isinstance(result[4], dict)
+
+
+def test_legacy_mixer_adapter_returns_circuit_and_non_callable_unchanged():
+    mixer_circuit = Circuit(2)
+    not_callable = object()
+
+    assert QUBO._legacy_mixer_adapter(mixer_circuit, [0.3]) is mixer_circuit
+    assert QUBO._legacy_mixer_adapter(not_callable, [0.3]) is not_callable
+
+
+def test_legacy_mixer_adapter_wraps_callable_with_beta_slice():
+    received = []
+
+    def mixer(beta):
+        received.append(beta)
+        return Circuit(2)
+
+    beta_slice = np.array([0.3])
+    adapted = QUBO._legacy_mixer_adapter(mixer, beta_slice)
+    adapted(0.999)
+
+    assert received == [beta_slice]
+
+
+def test_unified_qaoa_custom_mixer_circuit_is_appended_not_called():
+    qubo = _make_qubo()
+    mixer = Circuit(qubo.n)
+    mixer.add(gates.RY(0, 0.5))
+    uqaoa = UnifiedQAOA(qubo, variant="standard", custom_mixer=[mixer])
+
+    circuit = uqaoa.build_circuit(
+        [0.1, 0.2, 0.3, 0.4], depth=2, include_measurements=False
+    )
+
+    ry = [g for g in circuit.queue if isinstance(g, gates.RY)]
+    assert [g.parameters[0] for g in ry] == pytest.approx([0.5, 0.5])
+    assert not any(isinstance(g, gates.RX) for g in circuit.queue)
+
+
+def test_qubo_to_qaoa_circuit_custom_mixer_circuit_instance():
+    qubo = _make_qubo()
+    mixer = Circuit(qubo.n)
+    mixer.add(gates.RY(1, 0.7))
+
+    circuit = qubo.qubo_to_qaoa_circuit(
+        [0.1], [0.2], custom_mixer=[mixer], include_measurements=False
+    )
+
+    assert isinstance(circuit.queue[-1], gates.RY)
+    assert circuit.queue[-1].parameters[0] == pytest.approx(0.7)
+
+
+def test_unified_qaoa_custom_mixer_invalid_type_raises():
+    qubo = _make_qubo()
+    uqaoa = UnifiedQAOA(qubo, variant="standard", custom_mixer=[object()])
+
+    with pytest.raises(TypeError, match="custom_mixer elements must be"):
+        uqaoa.build_circuit([0.1, 0.2], depth=1, include_measurements=False)

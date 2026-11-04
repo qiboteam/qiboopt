@@ -198,6 +198,24 @@ class QUBO:
 
     @staticmethod
     def _legacy_mixer_adapter(mixer, beta_slice):
+        """Adapt a legacy custom mixer to the :class:`UnifiedQAOA` calling convention.
+        :class:`UnifiedQAOA` calls a custom mixer with the scalar ``beta`` of the
+        current layer, whereas the legacy :meth:`qubo_to_qaoa_circuit` API passed
+        the one-element slice ``betas[layer:layer + 1]``. Existing mixers may
+        therefore index ``beta[0]``. This wrapper ignores the scalar and calls
+        ``mixer`` with the legacy slice, preserving the caller's container type
+        (list, ``numpy.ndarray`` or ``torch.Tensor``).
+
+        Args:
+            mixer (callable or :class:`qibo.models.Circuit`): Custom mixer for one layer.
+            beta_slice (array-like): One-element slice ``betas[layer:layer + 1]``.
+
+        Returns:
+            callable or :class:`qibo.models.Circuit`: A callable that accepts the
+            scalar ``beta`` and returns ``mixer(beta_slice)``. Circuits and
+            non-callable objects are returned unchanged, so that
+            :meth:`UnifiedQAOA._apply_mixer` handles or rejects them.
+        """
         if isinstance(mixer, Circuit) or not callable(mixer):
             return mixer
         return lambda _beta: mixer(beta_slice)
@@ -778,10 +796,11 @@ class UnifiedQAOA:
             are used.
         hamiltonian_scale (float, optional): Scale factor used to normalize the Ising Hamiltonian,
             especially for LR-QAOA
-        custom_mixer: An optional callable or list of :class:`qibo.models.Circuit`.
-            If a single-element list, the same mixer is reused for every layer.
-            If its length equals the depth, each element is used for the corresponding
-            layer.
+        custom_mixer (list, optional): List whose elements are either
+            :class:`qibo.models.Circuit` objects, appended unchanged (they do not
+            depend on ``beta``), or callables ``f(beta) -> Circuit`` that receive the
+            layer's scalar ``beta``.
+
 
     Example:
         .. testcode::
@@ -1257,10 +1276,15 @@ class UnifiedQAOA:
                     f"custom_mixer length must be 1 or {depth}, "
                     f"got {len(self.custom_mixer)}."
                 )
-
+            if isinstance(mixer_fn, Circuit):
+                return circuit + mixer_fn
             if callable(mixer_fn):
                 return circuit + mixer_fn(betas[layer])
-            return circuit + mixer_fn
+            raise_error(
+                TypeError,
+                "custom_mixer elements must be qubo Circuits or callables"
+                f"returning a Circuit, got {type(mixer_fn).__name__}.",
+            )
 
         if self.variant == "ma":
             if self.ma_parameter_type == ParameterType.PER_QUBIT:
