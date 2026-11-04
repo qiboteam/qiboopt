@@ -1473,23 +1473,34 @@ def test_unpack_parameters_ma_with_torch(parameter_type):
     assert torch.equal(parameters.grad, torch.ones_like(parameters))
 
 
-def test_apply_mixer_adds_non_callable_custom_mixer():
-    class RecordingCircuit:
-        def __init__(self):
-            self.added = []
-
-        def __iadd__(self, other):
-            self.added.append(other)
-            return self
-
+def test_unified_qaoa_build_circuit_keeps_initial_state():
     qubo = _make_qubo()
-    mixer = object()  # not callable
+    init = Circuit(qubo.n)
+    init.add(gates.X(i) for i in range(qubo.n))
+    uqaoa = UnifiedQAOA(qubo, variant="standard", initial_state=init)
+
+    circuit = uqaoa.build_circuit([0.1, 0.2], depth=1, include_measurements=False)
+
+    assert all(isinstance(g, gates.X) for g in circuit.queue[: qubo.n])
+    assert not any(isinstance(g, gates.H) for g in circuit.queue)
+
+
+def test_unified_qaoa_build_circuit_keeps_callable_custom_mixer():
+    qubo = _make_qubo()
+
+    def mixer(beta):
+        c = Circuit(qubo.n)
+        c.add(gates.RY(0, beta))
+        return c
+
     uqaoa = UnifiedQAOA(qubo, variant="standard", custom_mixer=[mixer])
+    circuit = uqaoa.build_circuit(
+        [0.1, 0.2, 0.3, 0.4], depth=2, include_measurements=False
+    )
 
-    circuit = RecordingCircuit()
-    uqaoa._apply_mixer(circuit, layer=0, param_dict={"betas": [0.1]}, depth=1)
-
-    assert circuit.added == [mixer]
+    ry = [g for g in circuit.queue if isinstance(g, gates.RY)]
+    assert [g.parameters[0] for g in ry] == pytest.approx([0.3, 0.4])
+    assert not any(isinstance(g, gates.RX) for g in circuit.queue)
 
 
 def test_linear_initialization():

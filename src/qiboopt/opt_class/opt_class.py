@@ -1218,9 +1218,9 @@ class UnifiedQAOA:
     def _apply_initial_state(self, circuit):
         """Prepend the initial-state preparation to *circuit*."""
         if self.initial_state is not None:
-            circuit += self.initial_state
-        else:
-            circuit.add(gates.H(i) for i in range(self.n))
+            return circuit + self.initial_state
+        circuit.add(gates.H(i) for i in range(self.n))
+        return circuit
 
     def _apply_phase_separation(self, circuit, gamma):
         """Delegate to the QUBO's phase-separation routine."""
@@ -1242,10 +1242,8 @@ class UnifiedQAOA:
                 )
 
             if callable(mixer_fn):
-                circuit += mixer_fn(betas[layer])
-            else:
-                circuit += mixer_fn
-            return
+                return circuit + mixer_fn(betas[layer])
+            return circuit + mixer_fn
 
         if self.variant == "ma":
             if self.ma_parameter_type == ParameterType.PER_QUBIT:
@@ -1262,7 +1260,7 @@ class UnifiedQAOA:
                 )
                 for idx, (u, v) in enumerate(edge_list):
                     circuit.add(gates.RX(v, 2 * layer_betas[idx]))
-            return
+            return circuit
 
         # --- Standard / XQAOA / LR default mixer ---
         beta = param_dict["betas"][layer]
@@ -1273,6 +1271,7 @@ class UnifiedQAOA:
             circuit.add(gates.RX(i, 2 * beta))
             if alpha_val is not None and alpha_val != 0.0:
                 circuit.add(gates.RY(i, 2 * alpha_val))
+        return circuit
 
     def build_circuit(
         self,
@@ -1300,12 +1299,12 @@ class UnifiedQAOA:
         circuit = Circuit(self.n, density_matrix=density_matrix)
 
         # Initial state
-        self._apply_initial_state(circuit)
+        circuit = self._apply_initial_state(circuit)
 
         # QAOA layers
         for layer in range(depth):
             self._apply_phase_separation(circuit, param_dict["gammas"][layer])
-            self._apply_mixer(circuit, layer, param_dict, depth)
+            circuit = self._apply_mixer(circuit, layer, param_dict, depth)
 
         if include_measurements:
             circuit.add(gates.M(i) for i in range(self.n))
