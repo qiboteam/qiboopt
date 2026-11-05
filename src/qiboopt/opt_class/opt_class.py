@@ -1094,7 +1094,10 @@ class UnifiedQAOA:
         - xqaoa X=Y: ``[gammas..., thetas...]``
         - xqaoa Y: ``[gammas..., alphas...]``
         - xqaoa X: ``[gammas..., betas...]``
-        - lr: compact maximum-parameter form, then linearly ramped
+        - lr: ``[gamma_max, beta_max]``, expanded to the linear-ramp schedule
+          ``gamma_i = gamma_max * i / p`` and ``beta_i = beta_max * (p - i + 1) / p``
+          for ``i = 1, ..., p`` (gamma increases, beta decreases), following
+          Eq. (5) of `arXiv:2405.09169 <https://arxiv.org/abs/2405.09169>`_
         - ma: per-layer blocks
 
         Differentiable PyTorch parameters are not converted to NumPy, because
@@ -1231,10 +1234,12 @@ class UnifiedQAOA:
 
             if is_torch_parameters:
                 param_dict["gammas"] = [gamma_max * ramp_value for ramp_value in ramp]
-                param_dict["betas"] = [beta_max * ramp_value for ramp_value in ramp]
+                param_dict["betas"] = [
+                    beta_max * ramp_value for ramp_value in reversed(ramp)
+                ]
             else:
                 param_dict["gammas"] = gamma_max * ramp
-                param_dict["betas"] = beta_max * ramp
+                param_dict["betas"] = beta_max * ramp[::-1]
         elif self.variant == "ma":
             params_per_layer = None
 

@@ -1316,7 +1316,7 @@ def test_unpack_parameters_lr_with_torch():
     betas = torch.stack(unpacked["betas"])
 
     assert torch.allclose(gammas, torch.tensor([0.2, 0.4, 0.6]))
-    assert torch.allclose(betas, torch.tensor([0.3, 0.6, 0.9]))
+    assert torch.allclose(betas, torch.tensor([0.9, 0.6, 0.3]))
 
     loss = gammas.sum() + betas.sum()
     loss.backward()
@@ -1773,7 +1773,7 @@ def test_unified_qaoa_unpack_parameters_lr():
     uqaoa = UnifiedQAOA(qubo, variant="lr")
     unpacked = uqaoa.unpack_parameters(np.array([1.0, 2.0]), depth=4)
     assert np.allclose(unpacked["gammas"], [0.25, 0.5, 0.75, 1.0])
-    assert np.allclose(unpacked["betas"], [0.5, 1.0, 1.5, 2.0])
+    assert np.allclose(unpacked["betas"], [2.0, 1.5, 1.0, 0.5])
 
 
 def test_unified_qaoa_unpack_parameters_ma_per_qubit():
@@ -1932,3 +1932,15 @@ def test_unified_qaoa_custom_mixer_invalid_type_raises():
 
     with pytest.raises(TypeError, match="custom_mixer elements must be"):
         uqaoa.build_circuit([0.1, 0.2], depth=1, include_measurements=False)
+
+
+def test_unified_qaoa_build_circuit_lr_uses_decreasing_beta_ramp():
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="lr")
+
+    circuit = uqaoa.build_circuit([1.0, 2.0], depth=4, include_measurements=False)
+
+    rx_angles = [g.parameters[0] for g in circuit.queue if isinstance(g, gates.RX)]
+    # Two RX gates per layer, each with angle 2 * beta_layer.
+    assert rx_angles == pytest.approx(
+        [2 * beta for beta in [2.0, 1.5, 1.0, 0.5] for _ in range(uqaoa.n)]
+    )
