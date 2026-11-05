@@ -1523,6 +1523,90 @@ def test_qubo_to_qaoa_circuit_custom_mixer_receives_legacy_beta_slice(betas):
     assert [g.parameters[0] for g in ry] == pytest.approx([0.3, 0.4])
 
 
+def _gate_angles(circuit):
+    return [gate.parameters[0] for gate in circuit.queue if gate.parameters]
+
+
+@pytest.mark.parametrize("has_alphas, nparams", [(False, 4), (True, 6)])
+def test_qaoa_circuit_from_parameters_supports_jax_jacfwd(has_alphas, nparams):
+    jax = pytest.importorskip("jax")
+    jnp = jax.numpy
+    qubo = _make_qubo()
+
+    def angles(params):
+        circuit = qubo.qaoa_circuit_from_parameters(
+            params, p=2, include_measurements=False, has_alphas=has_alphas
+        )
+        return jnp.stack([jnp.asarray(a) for a in _gate_angles(circuit)])
+
+    x0 = np.linspace(0.1, 0.6, nparams)
+    jacobian = jax.jacfwd(angles)(jnp.asarray(x0))
+
+    # Gate angles are linear in the parameters, so column k of the Jacobian is
+    # angles(x0 + e_k) - angles(x0). x0 avoids zeros, which would drop RY gates.
+    base = np.asarray(angles(x0))
+    expected = np.stack(
+        [np.asarray(angles(x0 + e)) - base for e in np.eye(nparams)], axis=1
+    )
+    np.testing.assert_allclose(np.asarray(jacobian), expected, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    "variant, kwargs",
+    [
+        ("standard", {}),
+        ("xqaoa", {"mixer_type": "xy"}),
+        ("xqaoa", {"mixer_type": "x_equals_y"}),
+        ("xqaoa", {"mixer_type": "y"}),
+        ("xqaoa", {"mixer_type": "x"}),
+        ("lr", {}),
+        ("ma", {"ma_parameter_type": "per_qubit"}),
+        ("ma", {"ma_parameter_type": "per_edge", "graph": [(0, 1)]}),
+    ],
+)
+def test_unified_qaoa_build_circuit_supports_jax_jacfwd(variant, kwargs):
+    jax = pytest.importorskip("jax")
+    jnp = jax.numpy
+    uqaoa = UnifiedQAOA(_make_qubo(), variant=variant, **kwargs)
+    nparams = uqaoa.get_param_count(2)
+
+    def angles(params):
+        circuit = uqaoa.build_circuit(params, depth=2, include_measurements=False)
+        return jnp.stack([jnp.asarray(a) for a in _gate_angles(circuit)])
+
+    x0 = np.linspace(0.1, 0.9, nparams)
+    jacobian = jax.jacfwd(angles)(jnp.asarray(x0))
+
+    base = np.asarray(angles(x0))
+    expected = np.stack(
+        [np.asarray(angles(x0 + e)) - base for e in np.eye(nparams)], axis=1
+    )
+    np.testing.assert_allclose(np.asarray(jacobian), expected, atol=1e-6)
+
+
+def test_unified_qaoa_unpack_parameters_keeps_jax_arrays_for_ma():
+    jax = pytest.importorskip("jax")
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma", ma_parameter_type="per_qubit")
+
+    param_dict = uqaoa.unpack_parameters(jax.numpy.arange(6.0), depth=2)
+
+    assert isinstance(param_dict["gammas"], jax.Array)
+    assert isinstance(param_dict["betas"], jax.Array)
+    np.testing.assert_allclose(np.asarray(param_dict["gammas"]), [0.0, 3.0])
+    np.testing.assert_allclose(
+        np.asarray(param_dict["betas"]), [[1.0, 2.0], [4.0, 5.0]]
+    )
+
+
+def test_unified_qaoa_unpack_parameters_keeps_numpy_for_plain_inputs():
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma", ma_parameter_type="per_qubit")
+
+    param_dict = uqaoa.unpack_parameters([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], depth=2)
+
+    assert type(param_dict["gammas"]) is np.ndarray
+    assert type(param_dict["betas"]) is np.ndarray
+
+
 def test_linear_initialization():
     A = np.array([[1, 2], [3, 4]])
     b = np.array([5, 6])

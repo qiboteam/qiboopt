@@ -4,6 +4,7 @@ Optimisation classes
 
 import inspect
 import itertools
+import sys
 import warnings
 from collections import defaultdict
 from enum import Enum
@@ -1100,6 +1101,9 @@ class UnifiedQAOA:
         converting a tensor with ``requires_grad=True`` to NumPy would break
         autograd and raise a runtime error.
 
+        Likewise, JAX arrays and tracers are converted with ``jax.numpy`` rather than NumPy, so that transformations
+        such as ``jax.jacfwd`` and ``jax.grad`` can trace through the circuit parameters.
+
         Args:
             flat_params (array-like): Flat parameter vector.
             depth (int): Number of QAOA layers.
@@ -1133,11 +1137,32 @@ class UnifiedQAOA:
             except TypeError:
                 return False
 
-        is_torch_parameters = _contains_torch_values(flat_params)
+        def _is_jax_value(value):
+            """check for a JAX array or tracer without importing jax."""
+            jax = sys.modules.get("jax")
+            return jax is not None and isinstance(value, jax.Array)
 
-        # Preserve differentiable tensors. Keep the original NumPy behavior for
+        def _contains_jax_values(values):
+            """Detect a JAX array/tracer or a flat container containing them."""
+            if _is_jax_value(values):
+                return True
+            try:
+                return any(_is_jax_value(value) for value in values)
+            except TypeError:
+                return False
+
+        is_torch_parameters = _contains_torch_values(flat_params)
+        is_jax_parameters = not is_torch_parameters and _contains_jax_values(
+            flat_params
+        )
+
+        # Preserve differentiable tensors and JAX tracers. Keep the original NumPy behavior for
         # ordinary lists, tuples, and NumPy arrays.
-        if not is_torch_parameters:
+        if is_jax_parameters:
+            import jax.numpy as jnp
+
+            flat_params = jnp.asarray(flat_params, dtype=jnp.result_type(float))
+        elif not is_torch_parameters:
             flat_params = np.asarray(flat_params, dtype=float)
 
         expected = self.get_param_count(depth)
@@ -1245,6 +1270,9 @@ class UnifiedQAOA:
             if is_torch_parameters:
                 param_dict["gammas"] = gammas
                 param_dict["betas"] = betas
+            elif is_jax_parameters:
+                param_dict["gammas"] = jnp.stack(gammas)
+                param_dict["betas"] = jnp.stack(betas)
             else:
                 param_dict["gammas"] = np.asarray(gammas, dtype=float)
                 param_dict["betas"] = np.asarray(betas, dtype=float)
