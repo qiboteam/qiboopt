@@ -1159,8 +1159,7 @@ class UnifiedQAOA:
         # Preserve differentiable tensors and JAX tracers. Keep the original NumPy behavior for
         # ordinary lists, tuples, and NumPy arrays.
         if is_jax_parameters:
-            import jax.numpy as jnp
-
+            jnp = sys.modules["jax"].numpy
             flat_params = jnp.asarray(flat_params, dtype=jnp.result_type(float))
         elif not is_torch_parameters:
             flat_params = np.asarray(flat_params, dtype=float)
