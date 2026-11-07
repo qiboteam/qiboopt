@@ -12,7 +12,6 @@ from qibo.quantum_info import infidelity
 from qiboopt.opt_class.opt_class import (
     QUBO,
     LinearProblem,
-    ParameterType,
     UnifiedQAOA,
     variable_dict_to_ind_dict,
     variable_to_ind,
@@ -852,19 +851,6 @@ def test_unified_qaoa_train_requires_betas_when_gammas_given():
         uqaoa.train(gammas=[0.1], betas=None, p=1, maxiter=1)
 
 
-def test_unified_qaoa_get_param_count_ma_per_edge_requires_graph():
-    qubo = _make_qubo()
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant="ma",
-        ma_parameter_type="per_edge",
-        graph=None,
-    )
-
-    with pytest.raises(ValueError, match="Graph required for per-edge MA-QAOA"):
-        uqaoa.get_param_count(depth=2)
-
-
 def test_unified_qaoa_unpack_parameters_length_mismatch_raises():
     qubo = _make_qubo()
     uqaoa = UnifiedQAOA(qubo, variant="standard")
@@ -905,25 +891,6 @@ def test_unified_qaoa_unpack_parameters_xqaoa_x():
     assert np.allclose(unpacked["gammas"], [0.1, 0.2])
     assert np.allclose(unpacked["betas"], [0.3, 0.4])
     assert np.allclose(unpacked["alphas"], [0.0, 0.0])
-
-
-def test_unified_qaoa_unpack_parameters_ma_per_edge():
-    qubo = _make_qubo()
-    graph = [(0, 1), (1, 2)]
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant="ma",
-        ma_parameter_type="per_edge",
-        graph=graph,
-    )
-
-    params = np.array([0.1, 1.0, 2.0, 0.2, 3.0, 4.0])
-    unpacked = uqaoa.unpack_parameters(params, depth=2)
-
-    assert np.allclose(unpacked["gammas"], [0.1, 0.2])
-    assert unpacked["betas"].shape == (2, 2)
-    assert np.allclose(unpacked["betas"][0], [1.0, 2.0])
-    assert np.allclose(unpacked["betas"][1], [3.0, 4.0])
 
 
 def test_unified_qaoa_apply_mixer_custom_mixer_per_layer():
@@ -1019,42 +986,6 @@ def test_unified_qaoa_apply_mixer_custom_mixer_callable_branch():
     assert isinstance(circuit, Circuit)
 
 
-def test_unified_qaoa_apply_mixer_ma_per_qubit():
-    qubo = _make_qubo()
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant="ma",
-        ma_parameter_type="per_qubit",
-    )
-
-    circuit = uqaoa.build_circuit(
-        [0.1, 0.2, 0.3, 0.4, 0.5, 0.6],
-        depth=2,
-        include_measurements=False,
-    )
-
-    assert isinstance(circuit, Circuit)
-
-
-def test_unified_qaoa_apply_mixer_ma_per_edge():
-    qubo = _make_qubo()
-    graph = [(0, 1)]
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant="ma",
-        ma_parameter_type="per_edge",
-        graph=graph,
-    )
-
-    circuit = uqaoa.build_circuit(
-        [0.1, 1.0, 0.2, 2.0],
-        depth=2,
-        include_measurements=False,
-    )
-
-    assert isinstance(circuit, Circuit)
-
-
 def test_unified_qaoa_apply_mixer_standard_with_alphas():
     qubo = _make_qubo()
     uqaoa = UnifiedQAOA(qubo, variant="xqaoa", mixer_type="xy")
@@ -1111,32 +1042,6 @@ def test_unified_qaoa_summary_lr():
 
     assert "LR base variant   : lr" in summary
     assert "Note: parameter count is independent of depth!" in summary
-
-
-def test_unified_qaoa_summary_ma_per_qubit():
-    qubo = _make_qubo()
-    uqaoa = UnifiedQAOA(qubo, variant="ma", ma_parameter_type="per_qubit")
-
-    summary = uqaoa.summary(depth=2)
-
-    assert "MA parameter type : per_qubit" in summary
-    assert "Number of edges" not in summary
-
-
-def test_unified_qaoa_summary_ma_per_edge():
-    qubo = _make_qubo()
-    graph = [(0, 1), (1, 2)]
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant="ma",
-        ma_parameter_type="per_edge",
-        graph=graph,
-    )
-
-    summary = uqaoa.summary(depth=2)
-
-    assert "MA parameter type : per_edge" in summary
-    assert "Number of edges   : 2" in summary
 
 
 def test_qubo_normalized_by_J():
@@ -1380,99 +1285,6 @@ def test_unpack_parameters_x_equals_y_with_list_of_torch_tensors():
         assert parameter.grad.item() == pytest.approx(expected_grad)
 
 
-def test_unpack_parameters_ma_per_edge_requires_graph(monkeypatch):
-    qubo = _make_qubo()
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant="ma",
-        ma_parameter_type=ParameterType.PER_QUBIT,
-    )
-
-    uqaoa.ma_parameter_type = ParameterType.PER_EDGE
-    uqaoa.graph = None
-
-    # Bypass parameter counting to isolate the unpacking guard.
-    monkeypatch.setattr(uqaoa, "get_param_count", lambda depth: 1)
-
-    with pytest.raises(ValueError, match="Graph required for per-edge MA-QAOA"):
-        uqaoa.unpack_parameters([0.1], depth=1)
-
-
-def test_unpack_parameters_ma_rejects_unknown_parameter_type(monkeypatch):
-    qubo = _make_qubo()
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant="ma",
-        ma_parameter_type=ParameterType.PER_QUBIT,
-    )
-
-    uqaoa.ma_parameter_type = "unsupported"
-
-    # Bypass parameter counting to isolate the unpacking guard.
-    monkeypatch.setattr(uqaoa, "get_param_count", lambda depth: 1)
-
-    with pytest.raises(ValueError, match="Unknown MA parameter type"):
-        uqaoa.unpack_parameters([0.1], depth=1)
-
-
-@pytest.mark.parametrize(
-    "parameter_type",
-    [ParameterType.PER_QUBIT, ParameterType.PER_EDGE],
-)
-def test_unpack_parameters_ma_with_torch(parameter_type):
-    torch = pytest.importorskip("torch")
-    nx = pytest.importorskip("networkx")
-
-    qubo = _make_qubo()
-    graph = nx.complete_graph(qubo.n)
-
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant="ma",
-        ma_parameter_type=parameter_type,
-        graph=graph,
-    )
-
-    depth = 2
-    mixer_count = (
-        qubo.n if parameter_type == ParameterType.PER_QUBIT else graph.number_of_edges()
-    )
-    params_per_layer = 1 + mixer_count
-
-    parameters = torch.arange(
-        depth * params_per_layer,
-        dtype=torch.float64,
-        requires_grad=True,
-    )
-
-    unpacked = uqaoa.unpack_parameters(parameters, depth=depth)
-
-    assert isinstance(unpacked["gammas"], list)
-    assert isinstance(unpacked["betas"], list)
-    assert len(unpacked["gammas"]) == depth
-    assert len(unpacked["betas"]) == depth
-
-    for layer in range(depth):
-        start = layer * params_per_layer
-
-        assert torch.equal(
-            unpacked["gammas"][layer],
-            parameters[start],
-        )
-        assert torch.equal(
-            unpacked["betas"][layer],
-            parameters[start + 1 : start + params_per_layer],
-        )
-
-    loss = torch.stack(unpacked["gammas"]).sum() + sum(
-        beta_block.sum() for beta_block in unpacked["betas"]
-    )
-    loss.backward()
-
-    assert parameters.grad is not None
-    assert torch.equal(parameters.grad, torch.ones_like(parameters))
-
-
 def test_unified_qaoa_build_circuit_keeps_initial_state():
     qubo = _make_qubo()
     init = Circuit(qubo.n)
@@ -1560,8 +1372,7 @@ def test_qaoa_circuit_from_parameters_supports_jax_jacfwd(has_alphas, nparams):
         ("xqaoa", {"mixer_type": "y"}),
         ("xqaoa", {"mixer_type": "x"}),
         ("lr", {}),
-        ("ma", {"ma_parameter_type": "per_qubit"}),
-        ("ma", {"ma_parameter_type": "per_edge", "graph": [(0, 1)]}),
+        ("ma", {}),
     ],
 )
 def test_unified_qaoa_build_circuit_supports_jax_jacfwd(variant, kwargs):
@@ -1586,25 +1397,173 @@ def test_unified_qaoa_build_circuit_supports_jax_jacfwd(variant, kwargs):
 
 def test_unified_qaoa_unpack_parameters_keeps_jax_arrays_for_ma():
     jax = pytest.importorskip("jax")
-    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma", ma_parameter_type="per_qubit")
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma")
 
-    param_dict = uqaoa.unpack_parameters(jax.numpy.arange(6.0), depth=2)
+    param_dict = uqaoa.unpack_parameters(jax.numpy.arange(10.0), depth=2)
 
     assert isinstance(param_dict["gammas"], jax.Array)
     assert isinstance(param_dict["betas"], jax.Array)
-    np.testing.assert_allclose(np.asarray(param_dict["gammas"]), [0.0, 3.0])
     np.testing.assert_allclose(
-        np.asarray(param_dict["betas"]), [[1.0, 2.0], [4.0, 5.0]]
+        np.asarray(param_dict["gammas"]), [[0.0, 1.0, 2.0], [5.0, 6.0, 7.0]]
+    )
+    np.testing.assert_allclose(
+        np.asarray(param_dict["betas"]), [[3.0, 4.0], [8.0, 9.0]]
     )
 
 
 def test_unified_qaoa_unpack_parameters_keeps_numpy_for_plain_inputs():
-    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma", ma_parameter_type="per_qubit")
-
-    param_dict = uqaoa.unpack_parameters([0.0, 1.0, 2.0, 3.0, 4.0, 5.0], depth=2)
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma")
+    param_dict = uqaoa.unpack_parameters(list(np.arange(10.0)), depth=2)
 
     assert type(param_dict["gammas"]) is np.ndarray
     assert type(param_dict["betas"]) is np.ndarray
+
+
+def test_unified_qaoa_ma_cost_terms_independent_of_endpoint_order():
+    forward = UnifiedQAOA(
+        QUBO(0, {(0, 0): 1.0, (1, 1): -1.0, (0, 1): 0.5}), variant="ma"
+    )
+    backward = UnifiedQAOA(
+        QUBO(0, {(0, 0): 1.0, (1, 1): -1.0, (1, 0): 0.5}), variant="ma"
+    )
+
+    for uqaoa in (forward, backward):
+        qubits, weights = zip(*uqaoa.ma_cost_terms())
+        assert qubits == ((0,), (1,), (0, 1))
+        assert weights == pytest.approx([-0.625, 0.375, 0.125])
+
+    params = np.linspace(0.1, 1.0, forward.get_param_count(2))
+    state_forward = forward.build_circuit(params, depth=2, include_measurements=False)
+    state_backward = backward.build_circuit(params, depth=2, include_measurements=False)
+    np.testing.assert_allclose(
+        state_forward().state(), state_backward().state(), atol=1e-10
+    )
+
+
+def test_unified_qaoa_ma_cost_terms_merge_and_skip_zero_weights():
+    # (0, 1) and (1, 0) cancel; qubit 2 has no linear term.
+    qubo = QUBO(0, {0: 0.5, 1: 0.0, 2: 0.0}, {(0, 1): 0.3, (1, 0): -0.3, (1, 2): 0.2})
+    uqaoa = UnifiedQAOA(qubo, variant="ma")
+
+    qubits, weights = zip(*uqaoa.ma_cost_terms())
+    assert qubits == ((0,), (1, 2))
+    assert weights == pytest.approx([0.5, 0.2])
+    assert uqaoa.get_param_count(3) == 3 * (2 + qubo.n)
+
+
+def test_unified_qaoa_unpack_parameters_ma():
+    # _make_qubo() has 3 cost terms (h_0, h_1, J_01) and 2 qubits.
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma")
+
+    params = np.array([0.1, 0.2, 0.3, 1.0, 2.0, 0.4, 0.5, 0.6, 3.0, 4.0])
+    unpacked = uqaoa.unpack_parameters(params, depth=2)
+
+    assert unpacked["gammas"].shape == (2, 3)
+    assert unpacked["betas"].shape == (2, 2)
+    np.testing.assert_allclose(unpacked["gammas"], [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]])
+    np.testing.assert_allclose(unpacked["betas"], [[1.0, 2.0], [3.0, 4.0]])
+
+
+def test_unified_qaoa_unpack_parameters_ma_without_couplings():
+    qubo = QUBO(0, {(0, 0): 1.0, (1, 1): -1.0})
+    uqaoa = UnifiedQAOA(qubo, variant="ma")
+    params = np.array([0.1, 0.2, 1.0, 2.0, 0.3, 0.4, 3.0, 4.0])
+    unpacked = uqaoa.unpack_parameters(params, depth=2)
+    np.testing.assert_allclose(unpacked["gammas"], [[0.1, 0.2], [0.3, 0.4]])
+    np.testing.assert_allclose(unpacked["betas"], [[1.0, 2.0], [3.0, 4.0]])
+
+
+def test_unified_qaoa_build_circuit_ma_uses_independent_angles():
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma")
+    gammas = [0.1, 0.2, 0.3]
+    betas = [0.4, 0.5]
+
+    circuit = uqaoa.build_circuit(gammas + betas, depth=1, include_measurements=False)
+
+    rz = [g for g in circuit.queue if isinstance(g, gates.RZ)]
+    rx = [g for g in circuit.queue if isinstance(g, gates.RX)]
+    cnots = [g for g in circuit.queue if isinstance(g, gates.CNOT)]
+
+    # One RZ per cost term with angle -2 * gamma_a * coefficient_a.
+    assert [g.target_qubits[0] for g in rz] == [0, 1, 1]
+    assert [g.parameters[0] for g in rz] == pytest.approx(
+        [-2 * 0.1 * -0.625, -2 * 0.2 * 0.375, -2 * 0.3 * 0.125]
+    )
+    assert len(cnots) == 2
+    # One RX per qubit with angle 2 * beta_i, including every qubit.
+    assert [g.target_qubits[0] for g in rx] == [0, 1]
+    assert [g.parameters[0] for g in rx] == pytest.approx([0.8, 1.0])
+
+
+@pytest.mark.parametrize("depth", [1, 2])
+def test_unified_qaoa_ma_with_shared_angles_matches_standard(depth):
+    qubo = _make_qubo()
+    standard = UnifiedQAOA(qubo, variant="standard")
+    ma = UnifiedQAOA(qubo, variant="ma")
+    gammas = [0.3, 0.7][:depth]
+    betas = [0.2, 0.5][:depth]
+    m = len(ma.ma_cost_terms())
+
+    ma_params = []
+    for gamma, beta in zip(gammas, betas):
+        ma_params += [gamma] * m + [beta] * qubo.n
+
+    standard_state = standard.build_circuit(
+        gammas + betas, depth=depth, include_measurements=False
+    )().state()
+    ma_state = ma.build_circuit(
+        ma_params, depth=depth, include_measurements=False
+    )().state()
+
+    np.testing.assert_allclose(ma_state, standard_state, atol=1e-10)
+
+
+def test_unified_qaoa_summary_ma():
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma")
+
+    summary = uqaoa.summary(depth=2)
+
+    assert "MA cost terms     : 3" in summary
+    assert "Total parameters  : 10" in summary
+
+
+def test_unpack_parameters_ma_with_torch():
+    torch = pytest.importorskip("torch")
+
+    uqaoa = UnifiedQAOA(_make_qubo(), variant="ma")
+    depth = 2
+    n_terms = len(uqaoa.ma_cost_terms())
+    params_per_layer = n_terms + uqaoa.n
+
+    parameters = torch.arange(
+        depth * params_per_layer,
+        dtype=torch.float64,
+        requires_grad=True,
+    )
+
+    unpacked = uqaoa.unpack_parameters(parameters, depth=depth)
+
+    assert isinstance(unpacked["gammas"], list)
+    assert isinstance(unpacked["betas"], list)
+    assert len(unpacked["gammas"]) == depth
+    assert len(unpacked["betas"]) == depth
+
+    for layer in range(depth):
+        start = layer * params_per_layer
+        assert torch.equal(
+            unpacked["gammas"][layer], parameters[start : start + n_terms]
+        )
+        assert torch.equal(
+            unpacked["betas"][layer],
+            parameters[start + n_terms : start + params_per_layer],
+        )
+
+    loss = sum(block.sum() for block in unpacked["gammas"]) + sum(
+        block.sum() for block in unpacked["betas"]
+    )
+    loss.backward()
+
+    assert torch.equal(parameters.grad, torch.ones_like(parameters))
 
 
 def test_linear_initialization():
@@ -1725,27 +1684,20 @@ def test_qubo_to_unified_qaoa_returns_unified_instance():
 
 
 @pytest.mark.parametrize(
-    "variant,mixer_type,ma_parameter_type,depth,expected",
+    "variant,mixer_type,depth,expected",
     [
-        ("standard", None, None, 3, 6),
-        ("xqaoa", "xy", None, 3, 9),
-        ("xqaoa", "x_equals_y", None, 3, 6),
-        ("xqaoa", "y", None, 3, 6),
-        ("xqaoa", "x", None, 3, 6),
-        ("lr", None, None, 3, 2),
-        ("ma", None, "per_qubit", 3, 9),
+        ("standard", None, 3, 6),
+        ("xqaoa", "xy", 3, 9),
+        ("xqaoa", "x_equals_y", 3, 6),
+        ("xqaoa", "y", 3, 6),
+        ("xqaoa", "x", 3, 6),
+        ("lr", None, 3, 2),
+        ("ma", None, 3, 12),
     ],
 )
-def test_unified_qaoa_get_param_count(
-    variant, mixer_type, ma_parameter_type, depth, expected
-):
+def test_unified_qaoa_get_param_count(variant, mixer_type, depth, expected):
     qubo = QUBO(0, {(0, 0): 1.0, (1, 1): -1.0})
-    uqaoa = UnifiedQAOA(
-        qubo,
-        variant=variant,
-        mixer_type=mixer_type,
-        ma_parameter_type=ma_parameter_type,
-    )
+    uqaoa = UnifiedQAOA(qubo, variant=variant, mixer_type=mixer_type)
     assert uqaoa.get_param_count(depth) == expected
 
 
@@ -1774,17 +1726,6 @@ def test_unified_qaoa_unpack_parameters_lr():
     unpacked = uqaoa.unpack_parameters(np.array([1.0, 2.0]), depth=4)
     assert np.allclose(unpacked["gammas"], [0.25, 0.5, 0.75, 1.0])
     assert np.allclose(unpacked["betas"], [2.0, 1.5, 1.0, 0.5])
-
-
-def test_unified_qaoa_unpack_parameters_ma_per_qubit():
-    qubo = QUBO(0, {(0, 0): 1.0, (1, 1): -1.0})
-    uqaoa = UnifiedQAOA(qubo, variant="ma", ma_parameter_type="per_qubit")
-    params = np.array([0.1, 1.0, 2.0, 0.2, 3.0, 4.0])
-    unpacked = uqaoa.unpack_parameters(params, depth=2)
-    assert np.allclose(unpacked["gammas"], [0.1, 0.2])
-    assert unpacked["betas"].shape == (2, 2)
-    assert np.allclose(unpacked["betas"][0], [1.0, 2.0])
-    assert np.allclose(unpacked["betas"][1], [3.0, 4.0])
 
 
 def test_unified_qaoa_build_circuit_standard_matches_legacy():

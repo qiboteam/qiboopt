@@ -770,13 +770,6 @@ class MixerType(Enum):
     X = "x"  # Pure X-rotation: alpha = 0
 
 
-class ParameterType(Enum):
-    """MA-QAOA parameter type."""
-
-    PER_QUBIT = "per_qubit"
-    PER_EDGE = "per_edge"
-
-
 class UnifiedQAOA:
     """Unified QAOA implementation supporting Standard, XQAOA, LR-QAOA, and MA-QAOA.
 
@@ -788,10 +781,6 @@ class UnifiedQAOA:
         variant (str): One of ``"standard"``, ``"xqaoa"``, ``"lr"``, ``"ma"``.
         mixer_type (str, optional): For ``variant="xqaoa"``: ``"xy"``, ``"x_equals_y"``,
             ``"y"``, or ``"x"``.
-        ma_parameter_type (str, optional): For ``variant="ma"``: ``"per_qubit"`` or
-            ``"per_edge"``.
-        graph (optional): Graph with an ``edges`` attribute. Required for
-            ``ma_parameter_type="per_edge"``.
         initial_state (:class:`qibo.models.Circuit`, optional): Circuit that prepares
             the initial state.  When ``None`` (default), Hadamard gates on every qubit
             are used.
@@ -801,6 +790,25 @@ class UnifiedQAOA:
             :class:`qibo.models.Circuit` objects, appended unchanged (they do not
             depend on ``beta``), or callables ``f(beta) -> Circuit`` that receive the
             layer's scalar ``beta``.
+
+    For ``variant="ma"``, the multi-angle QAOA of Herrman *et al.*,
+    `Sci. Rep. 12, 6781 (2022) <https://doi.org/10.1038/s41598-022-10555-8>`_, is used.
+    Writing the Ising cost Hamiltonian as :math:`C = \\sum_a C_a`, where each
+    :math:`C_a` is a non-zero linear term :math:`h_i Z_i` or quadratic term
+    :math:`J_{ij} Z_i Z_j`, layer :math:`l` applies
+
+    .. math::
+
+        U_l = \\prod_{i=0}^{n-1} e^{-i \\beta_{l,i} X_i}
+              \\prod_a e^{i \\gamma_{l,a} C_a},
+
+    with an independent :math:`\\gamma_{l,a}` for every cost term and an independent
+    :math:`\\beta_{l,i}` for every qubit. Cost terms are listed by :meth:`ma_cost_terms`.
+    The sign of the cost exponent follows the gate convention of
+    :meth:`QUBO.qubo_to_qaoa_circuit` (equivalent to the paper's up to
+    :math:`\\gamma \\to -\\gamma`).
+    Setting all :math:`\\gamma_{l,a} = \\gamma_l` and all :math:`\\beta_{l,i} = \\beta_l`
+    recovers standard QAOA.
 
 
     Example:
@@ -822,8 +830,6 @@ class UnifiedQAOA:
         qubo,
         variant="standard",
         mixer_type=None,
-        ma_parameter_type=None,
-        graph=None,
         initial_state=None,
         hamiltonian_scale=1.0,
         custom_mixer=None,
@@ -834,7 +840,6 @@ class UnifiedQAOA:
         self.qubo = qubo
         self.n = qubo.n
         self.variant = variant.lower()
-        self.graph = graph
         self.initial_state = initial_state
         self.hamiltonian_scale = hamiltonian_scale
         self.custom_mixer = custom_mixer
@@ -842,7 +847,7 @@ class UnifiedQAOA:
         if self.variant == "xqaoa":
             self.mixer_type = MixerType(mixer_type or "xy")
         elif self.variant == "ma":
-            self.ma_parameter_type = ParameterType(ma_parameter_type or "per_qubit")
+            self._ma_terms = self.ma_cost_terms()
         elif self.variant != "standard" and self.variant != "lr":
             raise_error(
                 ValueError,
@@ -1053,6 +1058,33 @@ class UnifiedQAOA:
             return best, params, extra, circuit, statistics, original_circuit
         return best, params, extra, circuit, statistics
 
+    def ma_cost_terms(self):
+        """Return the Ising cost terms that receive independent angles in MA-QAOA.
+
+        Linear terms come first, ordered by qubit, followed by quadratic terms
+        ordered by ``(i, j)`` with ``i < j``. Quadratic coefficients stored as both
+        ``(i, j)`` and ``(j, i)`` are merged, so the result does not depend on the
+        endpoint ordering of the QUBO keys. Terms with zero coefficient are omitted.
+
+        Returns:
+            list: ``(qubits, coefficient)`` pairs, where ``qubits`` is ``(i,)`` for
+            :math:`h_i Z_i` and ``(i, j)`` for :math:`J_{ij} Z_i Z_j`.
+        """
+        terms = [
+            ((i,), self.qubo.h[i])
+            for i in range(self.n)
+            if self.qubo.h.get(i, 0.0) != 0
+        ]
+
+        couplings = defaultdict(float)
+        for (i, j), weight in self.qubo.J.items():
+            if i != j:
+                couplings[(min(i, j), max(i, j))] += weight
+        terms.extend(
+            (pair, weight) for pair, weight in sorted(couplings.items()) if weight != 0
+        )
+        return terms
+
     def get_param_count(self, depth):
         """Return the number of optimisation parameters for a given *depth*.
 
@@ -1072,17 +1104,7 @@ class UnifiedQAOA:
             return 2
 
         if self.variant == "ma":
-            if self.ma_parameter_type == ParameterType.PER_QUBIT:
-                return depth * (1 + self.n)
-            if self.ma_parameter_type == ParameterType.PER_EDGE:
-                if self.graph is None:
-                    raise_error(ValueError, "Graph required for per-edge MA-QAOA.")
-                n_edges = (
-                    len(self.graph.edges)
-                    if hasattr(self.graph, "edges")
-                    else len(self.graph)
-                )
-                return depth * (1 + n_edges)
+            return depth * (len(self._ma_terms) + self.n)
 
     def unpack_parameters(self, flat_params, depth):
         """Convert a flat parameter vector to a variant-specific structure.
@@ -1098,7 +1120,9 @@ class UnifiedQAOA:
           ``gamma_i = gamma_max * i / p`` and ``beta_i = beta_max * (p - i + 1) / p``
           for ``i = 1, ..., p`` (gamma increases, beta decreases), following
           Eq. (5) of `arXiv:2405.09169 <https://arxiv.org/abs/2405.09169>`_
-        - ma: per-layer blocks
+        - ma: per-layer blocks ``[gamma_{l,1..m}, beta_{l,0..n-1}]`` for
+          ``l = 1, ..., p``, where ``m = len(ma_cost_terms())``. ``gammas`` has
+          shape ``(p, m)`` and ``betas`` has shape ``(p, n)``.
 
         Differentiable PyTorch parameters are not converted to NumPy, because
         converting a tensor with ``requires_grad=True`` to NumPy would break
@@ -1241,35 +1265,16 @@ class UnifiedQAOA:
                 param_dict["gammas"] = gamma_max * ramp
                 param_dict["betas"] = beta_max * ramp[::-1]
         elif self.variant == "ma":
-            params_per_layer = None
-
-            if self.ma_parameter_type == ParameterType.PER_QUBIT:
-                params_per_layer = 1 + self.n
-
-            elif self.ma_parameter_type == ParameterType.PER_EDGE:
-                if self.graph is None:
-                    raise_error(ValueError, "Graph required for per-edge MA-QAOA.")
-
-                n_edges = (
-                    len(self.graph.edges)
-                    if hasattr(self.graph, "edges")
-                    else len(self.graph)
-                )
-                params_per_layer = 1 + n_edges
-
-            if params_per_layer is None:
-                raise_error(
-                    ValueError,
-                    f"Unknown MA parameter type: {self.ma_parameter_type}.",
-                )
+            n_terms = len(self._ma_terms)
+            params_per_layer = n_terms + self.n
 
             gammas = []
             betas = []
 
             for layer in range(depth):
                 start = layer * params_per_layer
-                gammas.append(flat_params[start])
-                betas.append(flat_params[start + 1 : start + params_per_layer])
+                gammas.append(flat_params[start : start + n_terms])
+                betas.append(flat_params[start + n_terms : start + params_per_layer])
 
             if is_torch_parameters:
                 param_dict["gammas"] = gammas
@@ -1291,8 +1296,24 @@ class UnifiedQAOA:
         return circuit
 
     def _apply_phase_separation(self, circuit, gamma):
-        """Delegate to the QUBO's phase-separation routine."""
-        self.qubo._phase_separation(circuit, gamma)
+        """Apply the cost layer.
+
+        For MA-QAOA, ``gamma`` holds one angle per entry of :meth:`ma_cost_terms`;
+        otherwise it is a scalar and the QUBO's phase-separation routine is used.
+        The gate convention matches :meth:`QUBO._phase_separation`.
+        """
+        if self.variant != "ma":
+            self.qubo._phase_separation(circuit, gamma)
+            return
+
+        for (qubits, weight), term_gamma in zip(self._ma_terms, gamma):
+            if len(qubits) == 1:
+                circuit.add(gates.RZ(qubits[0], -2 * term_gamma * weight))
+            else:
+                i, j = qubits
+                circuit.add(gates.CNOT(i, j))
+                circuit.add(gates.RZ(j, -2 * term_gamma * weight))
+                circuit.add(gates.CNOT(i, j))
 
     def _apply_mixer(self, circuit, layer, param_dict, depth):
         """Apply the mixer layer for the current layer."""
@@ -1319,20 +1340,10 @@ class UnifiedQAOA:
             )
 
         if self.variant == "ma":
-            if self.ma_parameter_type == ParameterType.PER_QUBIT:
-                layer_betas = param_dict["betas"][layer]  # shape (n_qubits,)
-                for i in range(self.n):
-                    circuit.add(gates.RX(i, 2 * layer_betas[i]))
-            elif self.ma_parameter_type == ParameterType.PER_EDGE:
-                # Apply RX with per-edge angle on the target qubit of each edge
-                layer_betas = param_dict["betas"][layer]
-                edge_list = (
-                    list(self.graph.edges)
-                    if hasattr(self.graph, "edges")
-                    else list(self.graph)
-                )
-                for idx, (u, v) in enumerate(edge_list):
-                    circuit.add(gates.RX(v, 2 * layer_betas[idx]))
+            # One independent mixer angle per qubit.
+            layer_betas = param_dict["betas"][layer]
+            for i in range(self.n):
+                circuit.add(gates.RX(i, 2 * layer_betas[i]))
             return circuit
 
         # --- Standard / XQAOA / LR default mixer ---
@@ -1420,14 +1431,7 @@ class UnifiedQAOA:
             lines.append(f"LR base variant   : lr")
             lines.append("Note: parameter count is independent of depth!")
         elif self.variant == "ma":
-            lines.append(f"MA parameter type : {self.ma_parameter_type.value}")
-            if self.ma_parameter_type == ParameterType.PER_EDGE:
-                n_edges = (
-                    len(self.graph.edges)
-                    if hasattr(self.graph, "edges")
-                    else len(self.graph)
-                )
-                lines.append(f"Number of edges   : {n_edges}")
+            lines.append(f"MA cost terms     : {len(self._ma_terms)}")
         return "\n".join(lines)
 
 
