@@ -535,3 +535,21 @@ def test_tail_expectation_pipeline(tail_problem):
     mlae = MaximumLikelihoodAmplitudeEstimation(4, shots=500).estimate(problem)
     assert abs(mlae.estimation - a_exact) < 0.01
     assert abs(mlae.estimation_processed - exact) < 0.06
+
+
+def test_mlae_default_minimizer_scalar_only_objective():
+    """The default minimiser falls back to point-wise evaluation for non-vectorised functions."""
+    mlae = MaximumLikelihoodAmplitudeEstimation([0, 1], shots=10)
+    bounds = [(0.0, np.pi / 2)]
+
+    # float(array) raises TypeError for arrays with several elements
+    def scalar_only(t):
+        return (float(t) - 1.0) ** 2
+
+    assert abs(mlae._default_minimizer(scalar_only, bounds) - 1.0) < 1e-6
+
+    # returns a scalar even for array input: wrong shape -> point-wise fallback
+    def wrong_shape(t):
+        return 0.5 if np.ndim(t) else (t - 0.7) ** 2
+
+    assert abs(mlae._default_minimizer(wrong_shape, bounds) - 0.7) < 1e-6

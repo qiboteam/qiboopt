@@ -647,3 +647,67 @@ def test_circuit_block_utilities():
     assert len(comp.queue) == len(comp.circuit.queue)
     with pytest.raises(ValueError):
         list(comp.on_qubits(0, 1))
+
+
+# --------------------------------------------------------------------------------------------
+# input validation of the gate-list builders
+# --------------------------------------------------------------------------------------------
+
+
+def test_cdkm_adder_gates_validation():
+    from qiboopt.circuit_library import cdkm_adder_gates
+
+    with pytest.raises(ValueError, match="at least 1"):
+        cdkm_adder_gates([], [], 0)
+    with pytest.raises(ValueError, match="same size"):
+        cdkm_adder_gates([0, 1], [2], 3)
+    with pytest.raises(ValueError, match="distinct"):
+        cdkm_adder_gates([0, 1], [2, 3], 4, carry_out=0)  # carry-out reuses a qubit
+    with pytest.raises(ValueError, match="distinct"):
+        cdkm_adder_gates([0, 1], [2, 3], 3)  # carry-in reuses a qubit
+    # a valid call still works, with and without carry-out
+    assert cdkm_adder_gates([0, 1], [2, 3], 4)
+    assert cdkm_adder_gates([0, 1], [2, 3], 4, carry_out=5)
+
+
+def test_check_qubit_list_validation():
+    from qiboopt.circuit_library._base import check_qubit_list
+
+    assert check_qubit_list((2, 0, 1), "q") == [2, 0, 1]
+    with pytest.raises(ValueError, match="repeated"):
+        check_qubit_list([0, 1, 1], "q")
+    with pytest.raises(ValueError, match="negative"):
+        check_qubit_list([0, -1], "q")
+
+
+def test_integer_comparator_gates_validation():
+    with pytest.raises(ValueError, match="At least one"):
+        integer_comparator_gates([], 0, 1)
+    with pytest.raises(ValueError, match="Unknown comparator method"):
+        integer_comparator_gates([0, 1], 2, 1, method="nope")
+    from qiboopt.circuit_library import num_comparator_ancillas
+
+    with pytest.raises(ValueError, match="Unknown comparator method"):
+        num_comparator_ancillas(3, "nope")
+    assert num_comparator_ancillas(3, "greedy") == 0
+    assert num_comparator_ancillas(3, "ripple") == 2
+
+
+def test_linear_rotation_gates_validation():
+    from qiboopt.circuit_library import linear_rotation_gates
+
+    with pytest.raises(ValueError, match="distinct"):
+        linear_rotation_gates([0, 1], 1, 0.1, 0.2)  # target is also a state qubit
+    with pytest.raises(ValueError, match="distinct"):
+        linear_rotation_gates(
+            [0, 1], 2, 0.1, 0.2, controls=[0]
+        )  # control is a state qubit
+    with pytest.raises(ValueError, match="repeated"):
+        linear_rotation_gates([0, 0], 2, 0.1, 0.2)
+    # several extra controls use the multi-controlled form
+    assert linear_rotation_gates([0, 1], 4, 0.1, 0.2, controls=[2, 3])
+
+
+def test_piecewise_linear_rotations_empty_breakpoints():
+    with pytest.raises(ValueError, match="At least one breakpoint"):
+        PiecewiseLinearPauliRotations(2, [], [], [])
