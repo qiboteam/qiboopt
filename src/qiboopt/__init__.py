@@ -5,4 +5,10 @@ try:
 except im.PackageNotFoundError:
     __version__ = "0.0.1"
 
-from . import combinatorial, integrations, opt_class
+from . import (
+    amplitude_estimation,
+    circuit_library,
+    combinatorial,
+    integrations,
+    opt_class,
+)
